@@ -31,16 +31,22 @@ def _chapters(a, n: int = 5) -> list[float]:
     if not a.cuts:
         return [a.duration * (i + 1) / (n + 1) for i in range(n)]
     out = []
+    gap = a.duration / (n * 1.6)
     for i in range(n):
         target = a.duration * (i + 1) / (n + 1)
-        out.append(min(a.cuts, key=lambda c: abs(c - target)))
-    return sorted(set(round(c, 1) for c in out))
+        c = min(a.cuts, key=lambda c: abs(c - target))
+        if abs(c - target) > gap / 2 or any(abs(c - o) < gap for o in out):
+            c = target                         # no usable cut nearby: chapter on the target time
+        if all(abs(c - o) >= gap * 0.8 for o in out):
+            out.append(c)
+    return sorted(round(c, 1) for c in out)
 
 
 SYSTEM = """You write the narration for a restored public domain silent comedy, presented on
 YouTube as a long-form video. Deadpan, warm, informed; never describe a gag before it
 happens. Return strict JSON:
 {"title": "YouTube title, 50 to 80 characters, names the star and the film, says restored",
+ "year": "release year as an integer if certain, else null",
  "description": "3 short paragraphs: what the film is, why it matters, what was restored",
  "intro": "narration, 45 to 70 words: year, studio, who is in it, one fact, what to watch for",
  "chapters": [{"t": seconds, "name": "2 to 5 words", "note": "one sentence, under 20 words"}],
@@ -91,6 +97,8 @@ def render(identifier: str, cfg: dict, limit_s: float | None = None) -> Path:
         a.duration = min(a.duration, limit_s)
         a.cuts = [c for c in a.cuts if c < limit_s - 10]
     p = plan(video, info, a, cfg["select"])
+    if not info.get("year") and isinstance(p.get("year"), int):
+        info["year"] = p["year"]
     tmp = Path(tempfile.mkdtemp(prefix="lfr_"))
     ecfg = cfg["edit"]
 
@@ -118,7 +126,8 @@ def render(identifier: str, cfg: dict, limit_s: float | None = None) -> Path:
         subprocess.run(cmd, check=True)
         return out
 
-    intro = narrated_card(info["title"] or "", f"{info.get('year') or ''}  ·  restored for Enlistra Reels", p["intro"], "intro")
+    sub = (f"{info['year']}  ·  " if info.get("year") else "") + "restored for Enlistra Reels"
+    intro = narrated_card(info["title"] or "", sub, p["intro"], "intro")
     outro = narrated_card("Thanks for watching", "Public domain film, restored and re-scored. @enlistra_reels", p["outro"], "outro")
 
     # 3. score for the body: rags back to back, crossfaded, with chapter notes ducked in
@@ -194,7 +203,10 @@ def render(identifier: str, cfg: dict, limit_s: float | None = None) -> Path:
                                        cfg["post"]).read_text())
     chap = "\n".join(f"{int((edit._dur(intro) + float(c['t'])) // 60)}:{int((edit._dur(intro) + float(c['t'])) % 60):02d} "
                      f"{c['name']}" for c in p.get("chapters", []))
-    m["caption"] = p["description"] + "\n\n0:00 Introduction\n" + chap + "\n\n" + m["caption"].split("\n\n", 1)[-1]
+    credit = f"Source: {info['title']}" + (f" ({info['year']})" if info.get("year") else "") + \
+        ". Public domain film, restored and re-scored by Enlistra Reels. Music: public domain recordings."
+    tags = " ".join(cfg["post"].get("hashtags", []))
+    m["caption"] = f"{p['description']}\n\n0:00 Introduction\n{chap}\n\n{credit}\n\n{tags}"
     m["critic"] = {"verdict": "pass", "feedback": ""}
     m["approval"] = "pending"
     m["longform"] = True
