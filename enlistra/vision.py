@@ -91,6 +91,12 @@ say "watch as" or describe the gag itself; let the footage deliver it. No puns a
 silent film, no exclamation marks. Hooks: 3 to 6 words, wry, true, and never spoil
 the payoff.
 
+Fields: "gag" is an internal note for the editor (what happens, any caveats). "caption"
+is what viewers read under the post: one or two short wry sentences, under 150
+characters, in the narrator's voice, that tease the scene without describing the payoff.
+Never mention timestamps, candidates, contact sheets, frames or anything about this
+editing process in hook, narration or caption.
+
 If you recognise the film (a Chaplin, Keaton, Lloyd, Arbuckle or Linder short), give
 its real title and year in film_title and year; otherwise null. Return strict JSON."""
 
@@ -125,7 +131,7 @@ def rank(video: Path, film_title: str, year, candidates: list[Clip], want: int,
         content.append(_img_block(sheet))
     spec = {"film_title_hint": film_title, "year_hint": year, "pick": want, "sfx_kinds": SFX_KINDS,
             "format": {"film_title": "real title or null", "year": "int or null",
-                       "picks": [{"id": 0, "gag": "...", "hook": "...", "narration": "...",
+                       "picks": [{"id": 0, "gag": "...", "hook": "...", "narration": "...", "caption": "...",
                                   "segments": [[0.0, 0.0], [0.0, 0.0]], "payoff": 0.0,
                                   "sfx": [{"t": 0.0, "kind": "thud"}]}]}}
     msg_text = f"Return exactly {want} picks, best first. " + json.dumps(spec)
@@ -164,7 +170,7 @@ def apply_picks(candidates: list[Clip], picks: list[dict]) -> list[Clip]:
             over = total - MAX_LEN
             segs[-1][1] = round(max(segs[-1][0] + 2.0, segs[-1][1] - over), 2)
         c = Clip(start=segs[0][0], end=segs[-1][1], score=base.score,
-                 hook=p.get("hook", ""), caption=p.get("gag", ""), why=p.get("gag", ""),
+                 hook=p.get("hook", ""), caption=p.get("caption") or p.get("hook", ""), why=p.get("gag", ""),
                  transcript=base.transcript)
         c.segments = segs
         c.narration = p.get("narration", "")

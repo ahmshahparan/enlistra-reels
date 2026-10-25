@@ -101,7 +101,8 @@ def do_rerender(name: str, hook: str, narration: str):
     apath = WORK / "analysis" / f"{ident}.json"
     a = analyze.Analysis.load(apath) if apath.exists() else analyze.analyze(video, apath)
     segs = src.get("segments") or [[src["start"], src["end"]]]
-    clip = Clip(start=segs[0][0], end=segs[-1][1], score=0, hook=hook, caption=r.get("gag") or "",
+    viewer_caption = (r.get("caption") or "").split("\n\nSource:")[0].strip() or hook
+    clip = Clip(start=segs[0][0], end=segs[-1][1], score=0, hook=hook, caption=viewer_caption,
                 why=r.get("gag") or "", narration=narration, payoff=src.get("payoff"),
                 sfx=src.get("sfx") or [], segments=segs)
     film_info = {"title": src.get("title"), "year": src.get("year")}
@@ -115,7 +116,7 @@ def do_rerender(name: str, hook: str, narration: str):
     verdict = "pass" if card["verdict"] == "pass" else "flagged"
     man = poster.write_manifest(out, {"identifier": ident, "title": src.get("title"), "year": src.get("year"),
                                       "reason_free": src.get("license")},
-                                {"hook": hook, "caption": r.get("gag") or "", "why": r.get("gag") or "",
+                                {"hook": hook, "caption": viewer_caption, "why": r.get("gag") or "",
                                  "start": clip.start, "end": clip.end, "segments": segs, "payoff": clip.payoff,
                                  "sfx": clip.sfx, "narration": narration}, CFG["post"])
     m = json.loads(man.read_text())
