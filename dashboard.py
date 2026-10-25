@@ -75,9 +75,10 @@ def _job(name: str, fn, *args):
     threading.Thread(target=run, daemon=True).start()
 
 
-def do_publish(name: str):
+def do_publish(name: str, platforms: list | None = None):
     mp4, man = ST.local_files(name)
-    res = poster.publish(man, CFG["post"], force=True)
+    pcfg = {**CFG["post"], "platforms": platforms} if platforms else CFG["post"]
+    res = poster.publish(man, pcfg, force=True)
     ST.activity("post", f"{name}.mp4 posted: {json.dumps(res)}", reel=name)
     return res
 
@@ -262,9 +263,10 @@ def _yt_status() -> dict:
 
 @app.post("/api/approve/<name>")
 def approve(name):
+    plats = (request.get_json(silent=True) or {}).get("platforms")
     ST.update_reel(name, stage="approved")
-    ST.activity("owner", f"Approved {name}.mp4; posting", reel=name)
-    _job(name, do_publish, name)
+    ST.activity("owner", f"Approved {name}.mp4; posting" + (f" to {', '.join(plats)}" if plats else ""), reel=name)
+    _job(name, do_publish, name, plats)
     return jsonify(ok=True)
 
 
