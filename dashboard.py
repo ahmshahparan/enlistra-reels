@@ -105,7 +105,8 @@ def do_rerender(name: str, hook: str, narration: str):
     viewer_caption = (r.get("caption") or "").split("\n\nSource:")[0].strip() or hook
     clip = Clip(start=segs[0][0], end=segs[-1][1], score=0, hook=hook, caption=viewer_caption,
                 why=r.get("gag") or "", narration=narration, payoff=src.get("payoff"),
-                sfx=src.get("sfx") or [], segments=segs)
+                sfx=src.get("sfx") or [], segments=segs, title=r.get("title") or hook,
+                style=r.get("style") or CFG["edit"].get("style", "cold"))
     film_info = {"title": src.get("title"), "year": src.get("year")}
     out = ST.out / f"{name}.mp4"
     ecfg, scfg = CFG["edit"], CFG["select"]
@@ -119,7 +120,8 @@ def do_rerender(name: str, hook: str, narration: str):
                                       "reason_free": src.get("license")},
                                 {"hook": hook, "caption": viewer_caption, "why": r.get("gag") or "",
                                  "start": clip.start, "end": clip.end, "segments": segs, "payoff": clip.payoff,
-                                 "sfx": clip.sfx, "narration": narration}, CFG["post"])
+                                 "sfx": clip.sfx, "narration": narration, "title": clip.title,
+                                 "style": clip.style}, CFG["post"])
     m = json.loads(man.read_text())
     m["critic"] = {"verdict": verdict, "scores": (card.get("judge") or {}).get("scores"), "feedback": card.get("feedback")}
     m["approval"] = "pending"

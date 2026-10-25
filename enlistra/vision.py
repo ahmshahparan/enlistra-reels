@@ -32,7 +32,7 @@ from .select import Clip
 log = logging.getLogger("vision")
 SFX_KINDS = ["boing", "thud", "crash", "glass", "whoosh", "snare", "squeak", "bed",
              "twang", "clank", "gong", "drumroll"]
-MIN_LEN, MAX_LEN = 14.0, 24.0
+MIN_LEN, MAX_LEN = 8.0, 26.0
 
 
 def contact_sheet(video: Path, start: float, end: float, out: Path, n: int = 12,
@@ -65,37 +65,47 @@ def contact_sheet(video: Path, start: float, end: float, out: Path, n: int = 12,
 
 
 SYSTEM = """You are the editor for a short-form video account that posts clips from public
-domain silent comedies with a deadpan narrator. You see contact sheets (12 frames each,
-timestamps burned in) for candidate windows from one film. Pick windows that contain a
-complete, visible physical gag with SETUP and PAYOFF, and describe ONLY what is visibly
+domain silent comedies (mostly Charlie Chaplin). You see contact sheets (12 frames each,
+timestamps burned in) for candidate windows from one film. Describe ONLY what is visibly
 happening. Never invent action you cannot see.
 
+What wins on Shorts in this niche (from channels with 100M-view Chaplin clips):
+- Physical conflict reads instantly with no context: Charlie vs a much bigger man,
+  slaps and kicks traded, boxing, fights with doors, police chases and escapes,
+  falls, things hitting people, Charlie outwitting a bully. Underdog wins > subtle gags.
+- The clip starts IN the action. The first second must already show Charlie moving or
+  something about to happen. No establishing shots, no slow walk-ins.
+- Short: one beat, then out. 10 to 25 seconds is the sweet spot; 8 is fine if the
+  gag is complete.
+
 Cut rules (hard):
-- A pick is ONE gag: setup, payoff, done. It is 1 to 3 SEGMENTS inside its candidate
-  window, spliced in order; use segments only to cut dead air (each at least 3 seconds).
-  Total spliced length 14 to 24 seconds. Cut tight; a reel that feels long is wrong.
-- Include setup: the payoff must come no earlier than 9 seconds after the start and
-  no later than 75 percent of the way through. Leave 2 to 3 seconds after the payoff
-  and END THERE: never run on into unrelated footage after the payoff.
-- No dead air: if the action pauses for more than 3 seconds, cut it out with a segment
-  boundary or choose a different window. Timestamps for payoff and sfx are absolute
-  film seconds and must fall inside one of the segments.
-- The narrator speaks for about 6 seconds from the start, so nothing important may
-  happen in the first 6 seconds; the setup should be readable, the payoff later.
-- Picks must come from different candidates and must not overlap.
+- A pick is ONE beat, 1 to 3 SEGMENTS inside its candidate window, spliced in order;
+  use segments only to cut dead air (each at least 2 seconds). Total spliced length
+  8 to 25 seconds.
+- The first segment must start on visible motion, at most 1 second before the action.
+- The payoff (the hit, the fall, the escape, the reversal) comes at least 3 seconds in.
+  Leave 1 to 2 seconds after it and END: never run on into unrelated footage.
+- No dead air: cut any pause longer than 2 seconds. Timestamps for payoff and sfx are
+  absolute film seconds and must fall inside one of the segments.
+- Picks must come from different candidates and must not overlap. Prefer candidates
+  where Charlie (the tramp: bowler hat, cane, moustache) is clearly visible.
 
-Narration style: dry and deadpan, two or three short sentences, 22 words max, with one
-turn the viewer did not expect, like a punchline. Open with the year spoken as words
-("Nineteen sixteen.") ONLY if the year is known; otherwise open with the setting. Never
-say "watch as" or describe the gag itself; let the footage deliver it. No puns about
-silent film, no exclamation marks. Hooks: 3 to 6 words, wry, true, and never spoil
-the payoff.
-
-Fields: "gag" is an internal note for the editor (what happens, any caveats). "caption"
-is what viewers read under the post: one or two short wry sentences, under 150
-characters, in the narrator's voice, that tease the scene without describing the payoff.
+Text fields:
+- "title": the platform title, plain and searchable, 40 to 70 characters, starts with
+  "Charlie Chaplin" (or the star's name if it is someone else), says what happens in
+  everyday words, may end with one fitting emoji. Examples of the register:
+  "Charlie Chaplin vs the big man who would not stop pushing",
+  "Charlie Chaplin escapes four policemen at once".
+- "hook": on-screen text, 2 to 6 words, punchy, true, does not spoil the payoff.
+- "narration": two short deadpan sentences, 18 words max, with one unexpected turn.
+  It plays OVER the action from the first second, so it must work while things move and
+  must end before the payoff. Open with the year in words only if the year is certain.
+  Never describe the gag; no puns about silent film; no exclamation marks.
+- "caption": what viewers read under the post: one or two wry sentences under 150
+  characters that tease without describing the payoff.
+- "gag": an internal note for the editor (what happens, any caveats).
 Never mention timestamps, candidates, contact sheets, frames or anything about this
-editing process in hook, narration or caption.
+editing process in title, hook, narration or caption.
 
 If you recognise the film (a Chaplin, Keaton, Lloyd, Arbuckle or Linder short), give
 its real title and year in film_title and year; otherwise null. Return strict JSON."""
@@ -131,7 +141,7 @@ def rank(video: Path, film_title: str, year, candidates: list[Clip], want: int,
         content.append(_img_block(sheet))
     spec = {"film_title_hint": film_title, "year_hint": year, "pick": want, "sfx_kinds": SFX_KINDS,
             "format": {"film_title": "real title or null", "year": "int or null",
-                       "picks": [{"id": 0, "gag": "...", "hook": "...", "narration": "...", "caption": "...",
+                       "picks": [{"id": 0, "gag": "...", "title": "...", "hook": "...", "narration": "...", "caption": "...",
                                   "segments": [[0.0, 0.0], [0.0, 0.0]], "payoff": 0.0,
                                   "sfx": [{"t": 0.0, "kind": "thud"}]}]}}
     msg_text = f"Return exactly {want} picks, best first. " + json.dumps(spec)
@@ -163,7 +173,7 @@ def apply_picks(candidates: list[Clip], picks: list[dict]) -> list[Clip]:
     for p in picks:
         base = candidates[int(p["id"])] if p.get("id") is not None and int(p["id"]) < len(candidates) else Clip(0, 0, 0)
         segs = p.get("segments") or [[p.get("start", base.start), p.get("end", base.end)]]
-        segs = [[round(float(a), 2), round(float(b), 2)] for a, b in segs if float(b) - float(a) >= 2.0]
+        segs = [[round(float(a), 2), round(float(b), 2)] for a, b in segs if float(b) - float(a) >= 1.5]
         segs.sort()
         total = sum(b - a for a, b in segs)
         if total > MAX_LEN:                      # trim the tail segment
@@ -174,6 +184,7 @@ def apply_picks(candidates: list[Clip], picks: list[dict]) -> list[Clip]:
                  transcript=base.transcript)
         c.segments = segs
         c.narration = p.get("narration", "")
+        c.title = (p.get("title") or "").strip()
         c.payoff = float(p["payoff"]) if p.get("payoff") is not None else None
         c.sfx = [s for s in p.get("sfx", []) if s.get("kind") in SFX_KINDS]
         out.append(c)

@@ -34,6 +34,8 @@ class Clip:
     payoff: float | None = None   # absolute time of the key moment
     sfx: list = field(default_factory=list)   # [{"t": abs seconds, "kind": str}]
     segments: list = field(default_factory=list)  # [[abs_start, abs_end], ...]; empty = whole clip
+    title: str = ""         # platform title, searchable ("Charlie Chaplin ...")
+    style: str = "cold"     # cold = action from frame one, music + sfx; cold_narrated = same plus voice
 
     def segs(self) -> list:
         return [list(map(float, s)) for s in self.segments] if self.segments else [[self.start, self.end]]

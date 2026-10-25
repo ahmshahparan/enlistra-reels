@@ -38,6 +38,13 @@ def _record(cfg: dict, entry: dict):
     store.get(cfg["paths"]["work"]).record_film(entry)
 
 
+def _style_seed(cfg: dict) -> int:
+    try:
+        return len(store.get(cfg["paths"]["work"]).done_ids())
+    except Exception:  # noqa: BLE001
+        return 0
+
+
 def _overlaps(c, kept) -> bool:
     return any(not (c.end <= k.start or c.start >= k.end) for k in kept)
 
@@ -90,8 +97,11 @@ def process_film(film, cfg: dict, work: Path, post_now: bool) -> list[Path]:
             return []
         clips = [c for c in clips if not _overlaps(c, [k[0] for k in kept])]
         fb = []
+        styles = ecfg.get("styles") or [ecfg.get("style", "cold")]
         for clip in clips:
             idx = len(kept) + len(flagged) + 1
+            # rotate formats across reels so the metrics can tell which one wins
+            clip.style = styles[(_style_seed(cfg) + idx) % len(styles)]
             out = work / "out" / f"{film.identifier}_{idx:02d}.mp4"
             out.parent.mkdir(parents=True, exist_ok=True)
             critic.prune_sfx(clip, a)
@@ -131,7 +141,8 @@ def process_film(film, cfg: dict, work: Path, post_now: bool) -> list[Path]:
         status = "pass" if (clip, out, card) in kept else "flagged"
         mpath = post.write_manifest(out, {**asdict(film), **{"title": film_info["title"], "year": film_info["year"]}},
                                     asdict(clip) | {"narration": clip.narration, "payoff": clip.payoff,
-                                                    "sfx": clip.sfx, "segments": clip.segs()}, cfg["post"])
+                                                    "sfx": clip.sfx, "segments": clip.segs(),
+                                                    "title": clip.title, "style": clip.style}, cfg["post"])
         m = json.loads(mpath.read_text())
         m["critic"] = {"verdict": status, "scores": (card.get("judge") or {}).get("scores"),
                        "feedback": card.get("feedback")}

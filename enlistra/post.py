@@ -34,7 +34,8 @@ def write_manifest(reel: Path, film: dict, clip: dict, cfg: dict) -> Path:
     full = f"{caption}\n\n{attribution}\n\n{' '.join(cfg['hashtags'])}"
     m = {
         "reel": str(reel), "cover": str(reel.with_suffix(".jpg")),
-        "hook": clip["hook"], "caption": full, "platforms": cfg["platforms"],
+        "hook": clip["hook"], "title": clip.get("title") or clip["hook"], "style": clip.get("style"),
+        "caption": full, "platforms": cfg["platforms"],
         "source": {"identifier": film["identifier"], "title": film["title"],
                    "year": film.get("year"), "license": film.get("reason_free"),
                    "start": clip["start"], "end": clip["end"], "segments": clip.get("segments"),
@@ -126,9 +127,12 @@ def youtube_short(manifest: dict) -> str | None:
         return None
     path = Path(manifest["reel"])
     size = path.stat().st_size
-    title = (manifest["hook"] or "Silent comedy")[:90] + " #Shorts"
+    base = (manifest.get("title") or manifest.get("hook") or "Charlie Chaplin")
+    tag = " #charliechaplin" if "chaplin" in base.lower() else ""
+    title = (base[:100 - len(tag) - 8] + tag + " #shorts")[:100]
     body = {"snippet": {"title": title, "description": manifest["caption"][:4900], "categoryId": "23",
-                        "tags": ["silent film", "classic comedy", "Chaplin", "public domain", "shorts"]},
+                        "tags": ["charlie chaplin", "chaplin", "charlie chaplin comedy", "silent film", "classic comedy",
+                     "funny", "comedy shorts", "public domain"]},
             "status": {"privacyStatus": os.environ.get("YT_PRIVACY", "private"),
                        "selfDeclaredMadeForKids": False, "embeddable": True}}
     init = requests.post("https://www.googleapis.com/upload/youtube/v3/videos",
@@ -196,7 +200,7 @@ def tiktok_post(manifest: dict) -> str | None:
     # Unaudited TikTok apps may only post SELF_ONLY, and only to accounts set to
     # Private. After the app audit, set TIKTOK_PRIVACY=PUBLIC_TO_EVERYONE.
     body = {
-        "post_info": {"title": manifest["hook"][:150],
+        "post_info": {"title": (manifest.get("title") or manifest["hook"])[:150],
                       "privacy_level": os.environ.get("TIKTOK_PRIVACY", "SELF_ONLY"),
                       "disable_duet": False, "disable_comment": False,
                       "disable_stitch": False, "video_cover_timestamp_ms": 1000},

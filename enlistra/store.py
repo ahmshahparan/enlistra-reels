@@ -165,7 +165,8 @@ def _row_from_manifest(name: str, m: dict, card: dict) -> dict:
         stage = "pending"
     else:
         stage = "unknown"
-    return {"name": name, "hook": m.get("hook"), "narration": m.get("narration"), "gag": m.get("gag"),
+    return {"name": name, "hook": m.get("hook"), "title": m.get("title"), "style": m.get("style"),
+            "narration": m.get("narration"), "gag": m.get("gag"),
             "caption": m.get("caption"), "source": m.get("source"), "created_at": m.get("created"),
             "stage": stage, "critic": crit, "gates": card.get("gates") or [], "judge": card.get("judge"),
             "status": st, "owner_note": m.get("owner_note"),
@@ -253,7 +254,8 @@ class SupabaseStore(FileStore):
             if p.exists():
                 self._upload(p, self._obj(fname), ctype)
         body = {"account_id": self.account, "name": name, "film_identifier": row["film_identifier"],
-                "hook": row["hook"], "narration": row["narration"], "gag": row["gag"], "caption": row["caption"],
+                "hook": row["hook"], "title": row["title"], "style": row["style"],
+                "narration": row["narration"], "gag": row["gag"], "caption": row["caption"],
                 "source": row["source"], "critic": row["critic"], "gates": row["gates"], "judge": row["judge"],
                 "stage": row["stage"], "status": row["status"], "video_path": self._obj(f"{name}.mp4"),
                 "cover_path": self._obj(f"{name}.jpg"), "sheet_path": self._obj(f"{name}.critic.jpg"),
@@ -285,6 +287,7 @@ class SupabaseStore(FileStore):
         if not man.exists():
             r = self.get_reel(name)
             m = {"reel": str(mp4), "cover": str(self.out / f"{name}.jpg"), "hook": r["hook"], "caption": r["caption"],
+                 "title": r.get("title"), "style": r.get("style"),
                  "narration": r["narration"], "gag": r["gag"], "source": r["source"], "status": r.get("status") or {},
                  "critic": r.get("critic") or {}, "platforms": list((r.get("status") or {}).keys()),
                  "created": r.get("created_at")}

@@ -48,9 +48,20 @@ def gates(clip: Clip, analysis, narr_dur: float, speed: float, cfg: dict) -> lis
     issues = []
     src_len = clip.src_duration
     out_len = src_len / speed
-    if not (cfg.get("min_len", 17) <= out_len <= cfg.get("max_len", 33)):
-        issues.append(f"reel is {out_len:.1f}s; it must be between {cfg.get('min_len', 17)} and "
-                      f"{cfg.get('max_len', 33)} seconds")
+    lo, hi = cfg.get("min_len", 8), cfg.get("max_len", 26)
+    if not (lo <= out_len <= hi):
+        issues.append(f"reel is {out_len:.1f}s; it must be between {lo} and {hi} seconds")
+    # the opening must move: mean motion of the first second vs the clip
+    if analysis is not None:
+        import numpy as _np
+        m = _np.array(analysis.motion, dtype=float)
+        if m.max() > 0:
+            m = m / m.max()
+            s0 = int(clip.segs()[0][0])
+            first = m[s0:s0 + 2].mean() if s0 + 2 <= len(m) else 0
+            whole = m[int(clip.start):int(clip.end) + 1].mean() if clip.end > clip.start else 0
+            if whole > 0 and first < 0.35 * whole:
+                issues.append("the first second is nearly still; start the first segment on movement")
     p_rel = clip.rel(clip.payoff) if clip.payoff is not None else None
     if clip.payoff is None:
         issues.append("no payoff timestamp was given")
@@ -58,23 +69,22 @@ def gates(clip: Clip, analysis, narr_dur: float, speed: float, cfg: dict) -> lis
         issues.append(f"payoff {clip.payoff:.1f}s is not inside any segment")
     else:
         p = p_rel / speed
-        frac = p / out_len if out_len else 0
-        narr_end = cfg.get("narration_start", 0.4) + narr_dur
-        if p < narr_end + cfg.get("voice_gap", 1.5):
-            issues.append(f"narration ends at {narr_end:.1f}s but the payoff is at {p:.1f}s; "
-                          f"the voice must finish at least {cfg.get('voice_gap', 1.5)}s before "
-                          f"the payoff (start the clip earlier or shorten the narration)")
-        if frac < 0.30:
-            issues.append(f"payoff comes too early ({frac:.0%} of the reel); include more setup")
-        if frac > 0.78:
-            issues.append(f"payoff comes too late ({frac:.0%} of the reel); trim the setup")
-        if out_len - p < 1.8:
-            issues.append("less than 2 seconds after the payoff; extend the end")
+        if p < 2.5:
+            issues.append(f"payoff at {p:.1f}s is too early; include a little setup")
+        if out_len - p < 0.8:
+            issues.append("less than 1 second after the payoff; extend the end")
+        if out_len - p > 6:
+            issues.append(f"the reel runs {out_len - p:.1f}s past the payoff; end 1 to 2 seconds after it")
+        if narr_dur > 0:
+            narr_end = cfg.get("narration_start", 0.3) + narr_dur
+            if p < narr_end + cfg.get("voice_gap", 0.5):
+                issues.append(f"narration ends at {narr_end:.1f}s but the payoff is at {p:.1f}s; "
+                              f"shorten the narration so it ends before the payoff")
     words = len((getattr(clip, "narration", "") or "").split())
-    if words == 0:
-        issues.append("narration is empty")
-    elif words > 26:
-        issues.append(f"narration is {words} words; keep it under 22")
+    if narr_dur > 0 and words > 22:
+        issues.append(f"narration is {words} words; keep it under 18")
+    if not (getattr(clip, "title", "") or "").strip():
+        issues.append("no platform title was given")
     return issues
 
 
@@ -93,25 +103,25 @@ def mix_levels(reel: Path, narr_end: float) -> dict:
 
 
 # ------------------------------------------------------------------ layer 2
-RUBRIC = """You are a tough short-form video editor reviewing a finished 9:16 reel made
-from a public domain silent comedy with a deadpan narrator. You see frames from the
-finished reel in order (timestamps burned in) and a timeline of what is heard. The card
-layout (dark frame, title above, credit below) is a fixed house style: do not score it
-and do not suggest layout changes. Judge the cut, the timing, the narration and the
-title. Calibration: 3 = fine to post, 4 = good, 5 = would share it. Score 1 to 5 on
-each, with one blunt sentence of reason:
+RUBRIC = """You are a tough short-form video editor reviewing a finished 9:16 Short made
+from a public domain silent comedy. Channels posting plain Chaplin fight and chase clips
+get tens of millions of views; this reel competes with them. You see frames from the
+finished reel in order (timestamps burned in) and a timeline of what is heard. The layout
+(footage full width over a blurred fill, bold text above) is fixed: do not score it.
+Calibration: 3 = fine to post, 4 = good, 5 = would share it. Score 1 to 5, one blunt
+sentence of reason each:
 
-legible    is it clear within 3 seconds who we are watching and where
-setup      does the narration set up without explaining the joke
-payoff     is there a visible payoff, and does it land after the voice has finished
-title      does the on-screen title intrigue without spoiling
-pace       is there dead air before or after the gag
-overall    would a stranger scrolling keep watching to the end (this is the one that counts)
+hook       does the very first second already show motion or a situation you want resolved
+legible    is it clear at a glance who we are watching (Charlie) and what is at stake
+payoff     is there a visible, physical payoff (hit, fall, escape, reversal)
+title      would the platform title make someone tap: plain, searchable, true, not spoiling
+pace       no dead air anywhere; ends quickly after the payoff
+overall    would a stranger scrolling watch to the end and replay (this is the one that counts)
 
 Then "fix": the single most useful change, as an instruction to the editor
-(e.g. "start 4 seconds earlier so the policeman's entrance is visible", "cut the last 3
-seconds", "narration spoils the slip; tease the dance instead"). Return strict JSON:
-{"scores": {"legible": n, "setup": n, "payoff": n, "title": n, "pace": n, "overall": n},
+(e.g. "start 3 seconds later, on the first shove", "cut the last 4 seconds", "the title
+should say he fights the big man"). Return strict JSON:
+{"scores": {"hook": n, "legible": n, "payoff": n, "title": n, "pace": n, "overall": n},
  "reasons": {...same keys...}, "fix": "..."}"""
 
 
@@ -135,13 +145,15 @@ def judge(reel: Path, clip: Clip, film: dict, narr_dur: float, speed: float, cfg
     out_len = (clip.end - clip.start) / speed
     timeline = {
         "duration_s": round(out_len, 1),
-        "title_on_screen": clip.hook,
-        "narration": {"text": getattr(clip, "narration", ""), "from_s": cfg.get("narration_start", 0.4),
-                      "to_s": round(cfg.get("narration_start", 0.4) + narr_dur, 1)},
+        "text_on_screen": clip.hook,
+        "platform_title": getattr(clip, "title", ""),
+        "narration": ({"text": getattr(clip, "narration", ""), "from_s": cfg.get("narration_start", 0.3),
+                       "to_s": round(cfg.get("narration_start", 0.3) + narr_dur, 1)}
+                      if narr_dur > 0 else "none (music and sound effects only)"),
         "payoff_s": round(clip.rel(clip.payoff) / speed, 1) if clip.payoff is not None and clip.rel(clip.payoff) is not None else None,
         "segments": clip.segs(),
         "sfx": [{"t": round(clip.rel(float(s["t"])) / speed, 1), "kind": s["kind"]} for s in clip.sfx if clip.rel(float(s["t"])) is not None],
-        "music": "public domain ragtime, ducked under the narration",
+        "music": "public domain ragtime" + (", ducked under the narration" if narr_dur > 0 else ""),
         "film": film,
     }
     data = base64.standard_b64encode(sheet.read_bytes()).decode()

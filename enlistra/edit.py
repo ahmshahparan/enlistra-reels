@@ -1,4 +1,10 @@
-"""Edit agent v2: card frame, pacing, narrator, music bed, synced effects.
+"""Edit agent v3: cold-open layout (default) or the original card frame.
+
+Styles (clip.style or edit.style):
+  cold           footage full width over a blurred fill, bold hook text, action from
+                 frame one, music + synced sfx, no narration
+  cold_narrated  same, with the deadpan narrator over the action
+  card           the v2 framed card with narration at the start
 
 Picture
   background  Pillow-rendered card (dark warm field, thin cream frame, film title
@@ -132,6 +138,50 @@ def card(W: int, H: int, pic_w: int, pic_h: int, pic_y: int, hook: str, film: di
     return out
 
 
+def overlay_text(W: int, H: int, pic_y: int, pic_h: int, hook: str, watermark: str, out: Path) -> Path:
+    """Transparent overlay for the cold-open layout: bold hook above the picture,
+    small handle below it. Big, high-contrast, readable on a phone at a glance."""
+    from PIL import Image, ImageDraw
+    img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    f_hook = _sans(int(W * 0.075))
+    text = hook.upper() if len(hook) <= 28 else hook
+    lines = _wrap(d, text, f_hook, int(W * 0.88))[:3]
+    if len(lines) == 2:                      # balance two lines instead of a long + a stub
+        words = text.split()
+        best = min(range(1, len(words)), key=lambda i: max(d.textlength(" ".join(words[:i]), font=f_hook),
+                                                          d.textlength(" ".join(words[i:]), font=f_hook)))
+        cand = [" ".join(words[:best]), " ".join(words[best:])]
+        if max(d.textlength(x, font=f_hook) for x in cand) <= W * 0.88:
+            lines = cand
+    lh = int(f_hook.size * 1.18)
+    y = pic_y - int(H * 0.035) - len(lines) * lh
+    for ln in lines:
+        tw = d.textlength(ln, font=f_hook)
+        d.text(((W - tw) / 2, y), ln, font=f_hook, fill=(255, 255, 255, 255),
+               stroke_width=max(4, W // 180), stroke_fill=(0, 0, 0, 255))
+        y += lh
+    if watermark:
+        f_wm = _sans(int(W * 0.032))
+        tw = d.textlength(watermark, font=f_wm)
+        d.text(((W - tw) / 2, pic_y + pic_h + int(H * 0.03)), watermark, font=f_wm,
+               fill=(255, 255, 255, 200), stroke_width=2, stroke_fill=(0, 0, 0, 200))
+    img.save(out)
+    return out
+
+
+def _sans(size: int):
+    from PIL import ImageFont
+    for c in ["/System/Library/Fonts/Supplemental/Arial Black.ttf",
+              "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+              "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"]:
+        try:
+            return ImageFont.truetype(c, size)
+        except OSError:
+            continue
+    return ImageFont.load_default()
+
+
 # ------------------------------------------------------------------ audio
 def narrate(text: str, cfg: dict, out: Path) -> Path | None:
     """Piper TTS. Returns None if no voice model or piper is missing."""
@@ -191,17 +241,27 @@ def render(video: Path, clip: Clip, out: Path, cfg: dict, film: dict | None = No
     tmp = Path(tempfile.mkdtemp(prefix="enlistra_"))
 
     src_w, src_h, _ = _probe(video)
-    pic_w = int(W * 0.93) // 2 * 2
-    pic_h = int(pic_w * src_h / src_w) // 2 * 2
-    pic_y = int(H * 0.27)
+    style = getattr(clip, "style", "") or cfg.get("style", "cold")
+    cold = style.startswith("cold")
+    if cold:
+        pic_w = W
+        pic_h = int(pic_w * src_h / src_w) // 2 * 2
+        pic_y = max(int(H * 0.30), (H - pic_h) // 2 - int(H * 0.02)) // 2 * 2
+    else:
+        pic_w = int(W * 0.93) // 2 * 2
+        pic_h = int(pic_w * src_h / src_w) // 2 * 2
+        pic_y = int(H * 0.27)
     segs = clip.segs()
     src_dur = clip.src_duration
     dur = src_dur / speed
     p_rel = clip.rel(clip.payoff) if clip.payoff is not None else None
 
     # ---- picture
-    card_png = card(W, H, pic_w, pic_h, pic_y, clip.hook or film.get("title", ""), film,
-                    cfg.get("watermark", ""), tmp / "card.png")
+    if cold:
+        card_png = overlay_text(W, H, pic_y, pic_h, clip.hook or "", cfg.get("watermark", ""), tmp / "text.png")
+    else:
+        card_png = card(W, H, pic_w, pic_h, pic_y, clip.hook or film.get("title", ""), film,
+                        cfg.get("watermark", ""), tmp / "card.png")
     zoom = "1"
     if p_rel is not None:
         p = p_rel                                # seconds into the spliced timeline (before speed)
@@ -216,8 +276,23 @@ def render(video: Path, clip: Clip, out: Path, cfg: dict, film: dict | None = No
           f"eq=contrast=1.06:brightness=0.01,noise=c0s=5:c0f=t,"
           f"setpts=PTS/{speed}[fg]")
     card_idx = n_seg
-    vgraph = (f"{fg};[{card_idx}:v][fg]overlay={(W - pic_w) // 2}:{pic_y}:shortest=1,"
-              f"fade=t=in:st=0:d=0.35,fade=t=out:st={dur - 0.45:.2f}:d=0.45,format=yuv420p[vout]")
+    if cold:
+        # footage fills the width, over a darkened blur of itself; text overlay on top;
+        # 6% crop removes the ragged edges old prints carry
+        crop = (f"crop=iw*0.94:ih*0.94,")
+        fg = (f"{cat}[cat]fps={fps},{crop}split=2[c_fg][c_bg];"
+              f"[c_bg]scale=270:480:force_original_aspect_ratio=increase,crop=270:480,boxblur=12:2,"
+              f"eq=brightness=-0.22:saturation=0.6,scale={W}:{H},setsar=1,setpts=PTS/{speed}[bg];"
+              f"[c_fg]scale={pic_w}:{pic_h},setsar=1,"
+              f"zoompan=z='{zoom}':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={pic_w}x{pic_h}:fps={fps},"
+              f"eq=contrast=1.10:brightness=0.02,unsharp=5:5:0.6,"
+              f"setpts=PTS/{speed}[fg]")
+        vgraph = (f"{fg};[bg][fg]overlay=0:{pic_y}:shortest=1[v1];"
+                  f"[v1][{card_idx}:v]overlay=0:0:shortest=1,"
+                  f"fade=t=out:st={dur - 0.3:.2f}:d=0.3,format=yuv420p[vout]")
+    else:
+        vgraph = (f"{fg};[{card_idx}:v][fg]overlay={(W - pic_w) // 2}:{pic_y}:shortest=1,"
+                  f"fade=t=in:st=0:d=0.35,fade=t=out:st={dur - 0.45:.2f}:d=0.45,format=yuv420p[vout]")
 
     # ---- audio
     inputs = []
@@ -227,7 +302,7 @@ def render(video: Path, clip: Clip, out: Path, cfg: dict, film: dict | None = No
     a_in = n_seg + 1
     agraph, mix = [], []
 
-    narr = narrate(getattr(clip, "narration", ""), cfg, tmp / "narr.wav")
+    narr = None if style == "cold" else narrate(getattr(clip, "narration", ""), cfg, tmp / "narr.wav")
     narr_dur = _dur(narr) if narr else 0.0
     clip.narr_dur = narr_dur
     music = pick_music(Path(cfg.get("music_dir", "assets/music")), rng)
@@ -240,7 +315,7 @@ def render(video: Path, clip: Clip, out: Path, cfg: dict, film: dict | None = No
         if narr:
             inputs += ["-i", str(narr)]
             ni = a_in; a_in += 1
-            delay = int(cfg.get("narration_start", 0.4) * 1000)
+            delay = int((0.3 if cold else cfg.get("narration_start", 0.4)) * 1000)
             agraph.append(f"[{ni}:a]adelay={delay}|{delay},apad=whole_dur={dur:.2f}[nar]")
             agraph.append(f"[nar]asplit=2[nar_mix][nar_sc]")
             agraph.append(f"[{mi}:a]volume={mvol}[m0]")
