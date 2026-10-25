@@ -38,6 +38,16 @@ def _record(cfg: dict, entry: dict):
     store.get(cfg["paths"]["work"]).record_film(entry)
 
 
+def _owned_chaplin(film, info: dict) -> bool:
+    """Chaplin's films from 1918 on (A Dog's Life onward) belong to Roy Export SAS."""
+    text = f"{film.title} {info.get('title') or ''} {getattr(film, 'creator', '') or ''}".lower()
+    year = info.get("year") or film.year
+    try:
+        return "chaplin" in text and year is not None and int(year) >= 1918
+    except (TypeError, ValueError):
+        return False
+
+
 def _style_seed(cfg: dict) -> int:
     try:
         return len(store.get(cfg["paths"]["work"]).done_ids())
@@ -94,6 +104,11 @@ def process_film(film, cfg: dict, work: Path, post_now: bool) -> list[Path]:
         if rnd == 0 and cfg["source"].get("require_identified") and not film_info.get("year") and hand is None:
             log.info("skipping %s: no year and the model could not identify the film (likely a compilation)", film.identifier)
             _record(cfg, {"identifier": film.identifier, "title": film.title, "year": None, "clips": [], "skipped": "unidentified"})
+            return []
+        if rnd == 0 and hand is None and _owned_chaplin(film, film_info):
+            log.info("skipping %s: Chaplin film from 1918 or later (Roy Export owns these)", film.identifier)
+            _record(cfg, {"identifier": film.identifier, "title": film_info["title"], "year": film_info.get("year"),
+                          "clips": [], "skipped": "rights: Chaplin 1918+"})
             return []
         clips = [c for c in clips if not _overlaps(c, [k[0] for k in kept])]
         fb = []
