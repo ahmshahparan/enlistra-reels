@@ -33,9 +33,20 @@ env.load()
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s: %(message)s", datefmt="%H:%M:%S")
 log = logging.getLogger("dashboard")
 
-CFG = pipeline.load_cfg("config.yaml")
-WORK = Path(CFG["paths"]["work"])
-ST = store.get(WORK)
+_BASE = pipeline.load_cfg("config.yaml", "silent-comedy")
+WORK = Path(_BASE["paths"]["work"])
+
+
+def S():
+    """Store for the account this thread (request or job) is working on."""
+    return store.get(WORK)
+
+
+def C() -> dict:
+    """Config for the current account (base config.yaml + accounts/<id>.yaml)."""
+    return pipeline.load_cfg("config.yaml", store.current_account())
+
+
 PLIST = Path.home() / "Library/LaunchAgents/com.enlistra.reels.plist"
 PASSWORD = os.environ.get("DASHBOARD_PASSWORD", "")
 TZ = ZoneInfo(os.environ.get("TZ_NAME", "America/New_York"))
@@ -48,6 +59,7 @@ RUN_LOCK = threading.Lock()
 # ------------------------------------------------------------------ auth
 @app.before_request
 def _auth():
+    store.use(request.args.get("a") or None)
     if not PASSWORD:
         return None
     a = request.headers.get("Authorization", "")
@@ -63,30 +75,33 @@ def _auth():
 
 # ------------------------------------------------------------------ jobs
 def _job(name: str, fn, *args):
+    acct = store.current_account()
+
     def run():
-        ST.set_job(name, "running")
+        store.use(acct)
+        S().set_job(name, "running")
         try:
             res = fn(*args)
-            ST.set_job(name, "done", str(res))
+            S().set_job(name, "done", str(res))
         except Exception as e:  # noqa: BLE001
             log.exception("job %s failed", name)
-            ST.set_job(name, "error", str(e))
-            ST.activity("error", f"{name}: {e}")
+            S().set_job(name, "error", str(e))
+            S().activity("error", f"{name}: {e}")
     threading.Thread(target=run, daemon=True).start()
 
 
 def do_publish(name: str, platforms: list | None = None):
-    mp4, man = ST.local_files(name)
-    pcfg = {**CFG["post"], "platforms": platforms} if platforms else CFG["post"]
+    mp4, man = S().local_files(name)
+    pcfg = {**C()["post"], "platforms": platforms} if platforms else C()["post"]
     res = poster.publish(man, pcfg, force=True)
-    ST.activity("post", f"{name}.mp4 posted: {json.dumps(res)}", reel=name)
+    S().activity("post", f"{name}.mp4 posted: {json.dumps(res)}", reel=name)
     return res
 
 
 def do_rerender(name: str, hook: str, narration: str):
     from enlistra import analyze, critic, edit, source
     from enlistra.select import Clip
-    r = ST.get_reel(name)
+    r = S().get_reel(name)
     if not r:
         raise RuntimeError("unknown reel")
     src = r["source"]
@@ -95,7 +110,7 @@ def do_rerender(name: str, hook: str, narration: str):
     if videos:
         video = videos[0]
     else:
-        film = source.resolve(ident, CFG["source"])
+        film = source.resolve(ident, C()["source"])
         if not film:
             raise RuntimeError(f"cannot fetch {ident} again from the Internet Archive")
         video = source.download(film, WORK / "src")
@@ -106,11 +121,11 @@ def do_rerender(name: str, hook: str, narration: str):
     clip = Clip(start=segs[0][0], end=segs[-1][1], score=0, hook=hook, caption=viewer_caption,
                 why=r.get("gag") or "", narration=narration, payoff=src.get("payoff"),
                 sfx=src.get("sfx") or [], segments=segs, title=r.get("title") or hook,
-                style=r.get("style") or CFG["edit"].get("style", "cold"))
+                style=r.get("style") or C()["edit"].get("style", "cold"))
     film_info = {"title": src.get("title"), "year": src.get("year")}
-    out = ST.out / f"{name}.mp4"
-    ecfg, scfg = CFG["edit"], CFG["select"]
-    ccfg = {**CFG.get("critic", {}), "narration_start": ecfg.get("narration_start", 0.4),
+    out = S().out / f"{name}.mp4"
+    ecfg, scfg = C()["edit"], C()["select"]
+    ccfg = {**C().get("critic", {}), "narration_start": ecfg.get("narration_start", 0.4),
             "anthropic_model": scfg.get("anthropic_model", "claude-sonnet-5-5")}
     critic.prune_sfx(clip, a)
     edit.render(video, clip, out, ecfg, film=film_info, analysis=a)
@@ -121,44 +136,81 @@ def do_rerender(name: str, hook: str, narration: str):
                                 {"hook": hook, "caption": viewer_caption, "why": r.get("gag") or "",
                                  "start": clip.start, "end": clip.end, "segments": segs, "payoff": clip.payoff,
                                  "sfx": clip.sfx, "narration": narration, "title": clip.title,
-                                 "style": clip.style}, CFG["post"])
+                                 "style": clip.style}, C()["post"])
     m = json.loads(man.read_text())
     m["critic"] = {"verdict": verdict, "scores": (card.get("judge") or {}).get("scores"), "feedback": card.get("feedback")}
     m["approval"] = "pending"
-    ST.save_reel(name, m, card)
+    S().save_reel(name, m, card)
     sc = (card.get("judge") or {}).get("scores", {}).get("overall")
-    ST.activity("critic", f"{name}.mp4 re-rendered: {verdict}" + (f", {sc}/5" if sc else "") +
+    S().activity("critic", f"{name}.mp4 re-rendered: {verdict}" + (f", {sc}/5" if sc else "") +
                 (f". {card['feedback']}" if card.get("feedback") else ""), reel=name)
     return verdict
 
 
 def do_run(films: int, ident: str | None, trigger: str = "owner"):
-    if not RUN_LOCK.acquire(blocking=False):
-        raise RuntimeError("a run is already in progress")
-    try:
-        cmd = [sys.executable, "cli.py", "run", "--films", str(films)] + (["--id", ident] if ident else [])
-        ST.activity("system", f"Run started by {trigger}" + (f" for {ident}" if ident else f" ({films} film)"))
+    """Runs are serialized across all channels (one render at a time on this box);
+    a run that arrives while another is going waits its turn."""
+    acct = store.current_account()
+    S().activity("system", f"Run queued by {trigger}" + (f" for {ident}" if ident else f" ({films} film)"))
+    with RUN_LOCK:
+        cmd = [sys.executable, "cli.py", "run", "--films", str(films), "--account", acct] + (["--id", ident] if ident else [])
+        S().activity("system", "Run started")
+        env_ = {**os.environ, "ENLISTRA_ACCOUNT": acct}
         with open(WORK / "run.log", "a") as fh:
-            r = subprocess.run(cmd, stdout=fh, stderr=subprocess.STDOUT, text=True)
-        ST.activity("system", f"Run finished (exit {r.returncode})")
+            fh.write(f"\n===== {acct} {datetime.now(TZ):%Y-%m-%d %H:%M} ({trigger})\n")
+            fh.flush()
+            r = subprocess.run(cmd, stdout=fh, stderr=subprocess.STDOUT, text=True, env=env_)
+        S().activity("system", f"Run finished (exit {r.returncode})")
         return r.returncode
-    finally:
-        RUN_LOCK.release()
+
+
+def _schedule_for(acct: str) -> list[str]:
+    cfg = pipeline.load_cfg("config.yaml", acct)
+    sch = cfg.get("schedule")
+    if sch is None and acct == "silent-comedy":
+        sch = SCHEDULE
+    return [] if not sch or sch == "off" else list(sch)
+
+
+def do_analyst():
+    from enlistra import analyst
+    return analyst.run()
 
 
 # ------------------------------------------------------------------ scheduler
+ANALYST_AT = os.environ.get("ANALYST_AT", "03:30")
+
+
 def _scheduler():
     fired = set()
-    log.info("schedule %s (%s)", SCHEDULE, TZ)
+    log.info("scheduler started (%s)", TZ)
     while True:
         now = datetime.now(TZ)
-        key = (now.date(), now.strftime("%H:%M"))
-        if now.strftime("%H:%M") in SCHEDULE and key not in fired:
+        hm = now.strftime("%H:%M")
+        try:
+            accts = [a["id"] for a in store.accounts() if a.get("active", True)]
+        except Exception as e:  # noqa: BLE001
+            log.warning("accounts lookup failed: %s", e)
+            accts = ["silent-comedy"]
+        if hm == ANALYST_AT:
+            for acct in accts:
+                key = (acct, now.date(), "analyst")
+                if key not in fired:
+                    fired.add(key)
+                    store.use(acct)
+                    _job("analyst", do_analyst)
+                    store.use(None)
+        for acct in accts:
+            key = (acct, now.date(), hm)
+            if key in fired or hm not in _schedule_for(acct):
+                continue
             fired.add(key)
-            if ST.paused():
-                ST.activity("system", "Scheduled run skipped: the kill switch is on")
-            elif not RUN_LOCK.locked():
-                _job("run", do_run, 1, None, "schedule")
+            store.use(acct)
+            if S().paused():
+                S().activity("system", "Scheduled run skipped: the kill switch is on")
+            else:
+                _job(f"run", do_run, 1, None, "schedule")
+            store.use(None)
         time.sleep(20)
 
 
@@ -176,8 +228,8 @@ def yt_start():
     cid = os.environ.get("YT_CLIENT_ID")
     if not cid:
         return "YT_CLIENT_ID is not set on the server yet.", 400
-    state = _s.token_urlsafe(16)
-    ST.set_setting("youtube_oauth_state", state)
+    state = store.current_account() + "." + _s.token_urlsafe(16)
+    S().set_setting("youtube_oauth_state", state)
     q = urlencode({"client_id": cid, "redirect_uri": _yt_redirect(), "response_type": "code",
                    "scope": poster.YT_SCOPES, "access_type": "offline", "prompt": "consent",
                    "include_granted_scopes": "true", "state": state})
@@ -192,7 +244,8 @@ def _yt_redirect() -> str:
 @app.get("/oauth/youtube/callback")
 def yt_callback():
     import requests as rq
-    if request.args.get("state") != ST.setting("youtube_oauth_state"):
+    store.use((request.args.get("state") or "").split(".")[0] or None)
+    if request.args.get("state") != S().setting("youtube_oauth_state"):
         return "State mismatch; start again from the dashboard.", 400
     code = request.args.get("code")
     if not code:
@@ -208,57 +261,77 @@ def yt_callback():
                 headers={"Authorization": f"Bearer {r['access_token']}"}, timeout=30).json()
     items = ch.get("items") or []
     r["channel"] = {"id": items[0]["id"], "title": items[0]["snippet"]["title"]} if items else None
-    ST.set_setting("youtube_token", r)
+    S().set_setting("youtube_token", r)
     name = r["channel"]["title"] if r["channel"] else "(no channel on this Google account yet)"
-    ST.activity("owner", f"YouTube connected: {name}")
-    return Response(status=302, headers={"Location": "/"})
+    S().activity("owner", f"YouTube connected: {name}")
+    return Response(status=302, headers={"Location": f"/?a={store.current_account()}"})
 
 
 @app.get("/health")
 def health():
-    return jsonify(ok=True, store=ST.kind)
+    return jsonify(ok=True, store=S().kind)
 
 
 @app.get("/media/<path:fname>")
 def media(fname):
     if "/" in fname or fname.startswith("."):
         return "", 404
-    p = ST.media(fname)
+    p = S().media(fname)
     if not p:
         return "", 404
+    if request.args.get("dl"):
+        return send_file(p.resolve(), as_attachment=True, download_name=fname)
     return send_file(p.resolve(), conditional=True)
+
+
+@app.post("/api/manual/<name>")
+def manual_posted(name):
+    plat = (request.json or {}).get("platform", "tiktok")
+    r = S().get_reel(name) or {}
+    st = dict(r.get("status") or {})
+    st[plat] = "posted manually " + time.strftime("%Y-%m-%d")
+    S().update_reel(name, status=st)
+    S().activity("owner", f"{name}.mp4 posted on {plat} from the phone", reel=name)
+    return jsonify(ok=True)
 
 
 @app.get("/api/state")
 def state():
-    jobs = ST.jobs()
+    jobs = S().jobs()
+    perf = (S().setting("analyst_summary") or {})
     items = []
-    for r in ST.reels():
+    for r in S().reels():
         name = r["name"]
         items.append({**r, "video": f"/media/{name}.mp4", "cover": f"/media/{name}.jpg",
                       "scores": (r.get("critic") or {}).get("scores") or (r.get("judge") or {}).get("scores"),
                       "fix": (r.get("judge") or {}).get("fix"), "created": r.get("created_at"),
-                      "job": jobs.get(name)})
+                      "job": jobs.get(name), "perf": (perf.get("per_video") or {}).get(name)})
     counts = {}
     for i in items:
         counts[i["stage"]] = counts.get(i["stage"], 0) + 1
     runlog = WORK / "run.log"
     tail = runlog.read_text().splitlines()[-25:] if runlog.exists() else []
     return jsonify({
-        "reels": items, "counts": counts, "activity": ST.activities(),
-        "paused": ST.paused(), "schedule": SCHEDULE, "tz": str(TZ), "store": ST.kind,
-        "require_approval": bool(CFG["post"].get("require_approval", True)),
+        "reels": items, "counts": counts, "activity": S().activities(),
+        "paused": S().paused(), "schedule": _schedule_for(store.current_account()),
+        "account": store.current_account(), "accounts": store.accounts(),
+        "analyst": {k: perf.get(k) for k in ("at", "videos", "views", "groups")},
+        "pipeline": C().get("pipeline", "film_clips"),
+        "bible": S().setting("bible_refs") if C().get("pipeline") == "character" else None,
+        "gen_spend": (S().setting("gen_spend") or {}).get(time.strftime("%Y-%m")),
+        "gen_budget": C().get("character", {}).get("monthly_budget_usd", 250), "tz": str(TZ), "store": S().kind,
+        "require_approval": bool(C()["post"].get("require_approval", True)),
         "privacy": os.environ.get("TIKTOK_PRIVACY", "SELF_ONLY"),
         "youtube": _yt_status(),
-        "jobs": jobs, "running": RUN_LOCK.locked() or (jobs.get("run") or {}).get("status") == "running",
-        "log": tail, "platform": platform.system(), "brain": ST.brains(),
-        "config": {"reels_per_film": CFG["select"]["reels_per_film"], "target": CFG.get("critic", {}).get("target_score"),
-                   "accept": CFG.get("critic", {}).get("accept_score"), "platforms": CFG["post"]["platforms"]},
+        "jobs": jobs, "running": (jobs.get("run") or {}).get("status") == "running",
+        "log": tail, "platform": platform.system(), "brain": S().brains(),
+        "config": {"reels_per_film": C()["select"]["reels_per_film"], "target": C().get("critic", {}).get("target_score"),
+                   "accept": C().get("critic", {}).get("accept_score"), "platforms": C()["post"]["platforms"]},
     })
 
 
 def _yt_status() -> dict:
-    t = ST.setting("youtube_token") or {}
+    t = S().setting("youtube_token") or {}
     return {"configured": bool(os.environ.get("YT_CLIENT_ID")), "connected": bool(t.get("refresh_token")),
             "channel": (t.get("channel") or {}).get("title"), "privacy": os.environ.get("YT_PRIVACY", "private")}
 
@@ -266,8 +339,8 @@ def _yt_status() -> dict:
 @app.post("/api/approve/<name>")
 def approve(name):
     plats = (request.get_json(silent=True) or {}).get("platforms")
-    ST.update_reel(name, stage="approved")
-    ST.activity("owner", f"Approved {name}.mp4; posting" + (f" to {', '.join(plats)}" if plats else ""), reel=name)
+    S().update_reel(name, stage="approved")
+    S().activity("owner", f"Approved {name}.mp4; posting" + (f" to {', '.join(plats)}" if plats else ""), reel=name)
     _job(name, do_publish, name, plats)
     return jsonify(ok=True)
 
@@ -275,39 +348,83 @@ def approve(name):
 @app.post("/api/reject/<name>")
 def reject(name):
     note = (request.json or {}).get("note", "")
-    ST.update_reel(name, stage="rejected", owner_note=note)
-    ST.activity("owner", f"Rejected {name}.mp4" + (f": {note}" if note else ""), reel=name)
+    S().update_reel(name, stage="rejected", owner_note=note)
+    S().activity("owner", f"Rejected {name}.mp4" + (f": {note}" if note else ""), reel=name)
     return jsonify(ok=True)
 
 
 @app.post("/api/restore/<name>")
 def restore(name):
-    ST.update_reel(name, stage="pending")
+    S().update_reel(name, stage="pending")
     return jsonify(ok=True)
 
 
 @app.post("/api/rerender/<name>")
 def rerender(name):
     d = request.json or {}
-    ST.activity("owner", f"Edited {name}.mp4; re-rendering", reel=name)
+    S().activity("owner", f"Edited {name}.mp4; re-rendering", reel=name)
     _job(name, do_rerender, name, d.get("hook", ""), d.get("narration", ""))
     return jsonify(ok=True)
 
 
 @app.post("/api/run")
 def run_now():
-    if RUN_LOCK.locked():
-        return jsonify(ok=False, error="a run is already in progress"), 409
+    if (S().job("run") or {}).get("status") == "running":
+        return jsonify(ok=False, error="a run is already queued or running for this channel"), 409
     d = request.json or {}
     _job("run", do_run, int(d.get("films", 1)), d.get("id") or None)
+    return jsonify(ok=True)
+
+
+@app.post("/api/bible/draft")
+def bible_draft():
+    from enlistra import character
+    _job("bible", character.build_bible, C().get("character", {}))
+    return jsonify(ok=True)
+
+
+@app.post("/api/bible/approve")
+def bible_approve():
+    b = S().setting("bible_refs") or {}
+    if not b.get("views"):
+        return jsonify(ok=False, error="no character sheet drafted yet"), 400
+    b["approved"] = bool((request.json or {}).get("ok", True))
+    S().set_setting("bible_refs", b)
+    S().activity("owner", "Character sheet " + ("approved" if b["approved"] else "sent back for a redraft"))
+    return jsonify(ok=True)
+
+
+def do_feature(ident: str):
+    acct = store.current_account()
+    with RUN_LOCK:
+        S().activity("system", f"Long-form feature started for {ident}")
+        with open(WORK / "run.log", "a") as fh:
+            r = subprocess.run([sys.executable, "cli.py", "feature", ident, "--account", acct], stdout=fh,
+                               stderr=subprocess.STDOUT, text=True, env={**os.environ, "ENLISTRA_ACCOUNT": acct})
+        S().activity("system", f"Long-form feature finished (exit {r.returncode})")
+        return r.returncode
+
+
+@app.post("/api/feature")
+def feature():
+    ident = ((request.json or {}).get("id") or "").strip()
+    if not ident:
+        return jsonify(ok=False, error="give an Internet Archive id"), 400
+    _job("feature", do_feature, ident)
+    return jsonify(ok=True)
+
+
+@app.post("/api/analyst")
+def analyst_now():
+    _job("analyst", do_analyst)
     return jsonify(ok=True)
 
 
 @app.post("/api/pause")
 def pause():
     on = bool((request.json or {}).get("on", True))
-    ST.set_paused(on)
-    ST.activity("owner", "Kill switch ON: scheduled runs will not start" if on else "Kill switch OFF: scheduled runs resume")
+    S().set_paused(on)
+    S().activity("owner", "Kill switch ON: scheduled runs will not start" if on else "Kill switch OFF: scheduled runs resume")
     return jsonify(ok=True, paused=on)
 
 
@@ -315,15 +432,15 @@ def pause():
 def brain(name):
     if not name.replace("-", "").replace("_", "").isalnum():
         return jsonify(ok=False), 400
-    ST.set_brain(name, (request.json or {}).get("text", ""))
-    ST.activity("owner", f"Brand brain updated: {name}.md")
+    S().set_brain(name, (request.json or {}).get("text", ""))
+    S().activity("owner", f"Brand brain updated: {name}.md")
     return jsonify(ok=True)
 
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "8765"))
     host = os.environ.get("HOST", "0.0.0.0" if os.environ.get("RENDER") else "127.0.0.1")
-    if SCHEDULE:
+    if os.environ.get("SCHEDULE", "").lower() != "off":
         threading.Thread(target=_scheduler, daemon=True).start()
-    print(f"Enlistra Reels dashboard: http://{host}:{port}  (store: {ST.kind})")
+    print(f"Enlistra Reels dashboard: http://{host}:{port}  (store: {S().kind})")
     app.run(host=host, port=port, debug=False, threaded=True)

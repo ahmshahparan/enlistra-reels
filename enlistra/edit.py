@@ -330,8 +330,8 @@ def render(video: Path, clip: Clip, out: Path, cfg: dict, film: dict | None = No
         agraph.append(f"[{ni}:a]adelay=400|400,apad=whole_dur={dur:.2f}[nar_mix]")
         mix.append("[nar_mix]")
 
-    cues = list(getattr(clip, "sfx", []) or [])
-    if not cues and analysis is not None:
+    cues = list(getattr(clip, "sfx", []) or []) if cfg.get("sfx", True) else []
+    if not cues and analysis is not None and cfg.get("sfx", True):
         cues = [c for c in motion_cues(analysis, clip.start, clip.end) if clip.rel(c["t"]) is not None]
     sfx_dir = Path(cfg.get("sfx_dir", "assets/sfx"))
     for k, cue in enumerate(cues):

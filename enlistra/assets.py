@@ -51,6 +51,49 @@ SFX = [
 ]
 
 
+# Musopen collection on archive.org: recordings released under the Public Domain Mark.
+MUSOPEN = "MusopenCollectionAsFlac"
+NATURE_MUSIC = [
+    ("grieg_morning", "Greig_PeerGynt/EdvardGrieg-PeerGyntSuiteNo.1Op.46-01-Morning.mp3"),
+    ("smetana_vltava", None),
+    ("mendelssohn_hebrides", None),
+    ("borodin_steppes", None),
+    ("bach_goldberg_aria", None),
+    ("dvorak_american_lento", None),
+    ("haydn_lark_adagio", None),
+    ("mendelssohn_italian_andante", None),
+]
+_NATURE_MATCH = {"smetana_vltava": "Vltava", "mendelssohn_hebrides": "HebridesOverture",
+                 "borodin_steppes": "InTheSteppesOfCentralAsia", "bach_goldberg_aria": "-01-GoldbergVariationsBwv.988-Aria",
+                 "dvorak_american_lento": "American-02-Lento", "haydn_lark_adagio": "Lark-02-AdagioCantabile",
+                 "mendelssohn_italian_andante": "italian-02-AndanteConMoto"}
+
+
+def ensure_nature(root: str | Path = "assets", seconds: float = 150.0) -> list[Path]:
+    """Calm public domain music for the Wild Facts channel (first N seconds of each)."""
+    root = Path(root)
+    files = [f["name"] for f in requests.get(f"https://archive.org/metadata/{MUSOPEN}", timeout=60).json()["files"]
+             if f["name"].endswith(".mp3")]
+    out = []
+    for key, name in NATURE_MUSIC:
+        name = name or next((f for f in files if _NATURE_MATCH[key] in f), None)
+        if not name:
+            log.warning("nature track %s not found", key)
+            continue
+        src = _fetch(MUSOPEN, name, root / "raw" / f"{key}.mp3")
+        dst = root / "music-nature" / f"{key}.m4a"
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        if not dst.exists():
+            subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(src), "-t", f"{seconds:.0f}",
+                            "-af", "loudnorm=I=-20:TP=-2:LRA=9,afade=t=out:st=%.0f:d=3" % (seconds - 3),
+                            "-c:a", "aac", "-b:a", "128k", str(dst)], check=True)
+        out.append(dst)
+    (root / "music-nature" / "CREDITS.md").write_text(
+        "# Wild Facts music\n\nMusopen recordings, Public Domain Mark 1.0, via "
+        "https://archive.org/details/MusopenCollectionAsFlac\n" + "".join(f"- {p.stem}\n" for p in out))
+    return out
+
+
 def _first_mp3(identifier: str) -> str:
     d = requests.get(f"https://archive.org/metadata/{identifier}", timeout=30).json()
     for f in d["files"]:

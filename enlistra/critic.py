@@ -85,6 +85,9 @@ def gates(clip: Clip, analysis, narr_dur: float, speed: float, cfg: dict) -> lis
         issues.append(f"narration is {words} words; keep it under 18")
     if not (getattr(clip, "title", "") or "").strip():
         issues.append("no platform title was given")
+    fc = getattr(clip, "fact_confidence", None)
+    if fc is not None and str(fc).lower() != "high":
+        issues.append(f"fact confidence is {fc}; use a fact you are certain is true and widely documented")
     return issues
 
 
@@ -159,7 +162,7 @@ def judge(reel: Path, clip: Clip, film: dict, narr_dur: float, speed: float, cfg
     data = base64.standard_b64encode(sheet.read_bytes()).decode()
     msg = anthropic.Anthropic().messages.create(
         model=cfg.get("anthropic_model", "claude-sonnet-5-5"), max_tokens=4000,
-        system=RUBRIC + ("\n\nHouse voice rules the narration must follow:\n" + _brain() if _brain() else ""),
+        system=(Path(cfg["rubric_file"]).read_text() if cfg.get("rubric_file") and Path(cfg["rubric_file"]).exists() else RUBRIC) + ("\n\nHouse voice rules the narration must follow:\n" + _brain() if _brain() else ""),
         messages=[{"role": "user", "content": [
             {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": data}},
             {"type": "text", "text": "Timeline of what is heard:\n" + json.dumps(timeline, indent=1)}]}])
@@ -172,10 +175,45 @@ def judge(reel: Path, clip: Clip, film: dict, narr_dur: float, speed: float, cfg
         return None
 
 
+_WORD = __import__("re").compile(r"[a-z]+")
+_STOP = {"the", "a", "an", "of", "to", "and", "in", "on", "with", "his", "her", "is", "at", "for", "charlie",
+         "chaplin", "vs", "by", "from", "it", "he", "she", "they", "this", "that", "one", "two"}
+_RECENT: list | None = None
+
+
+def _words(t: str) -> set:
+    return {w for w in _WORD.findall((t or "").lower()) if w not in _STOP and len(w) > 2}
+
+
+def variety_issues(clip: Clip, limit: int = 120) -> list[str]:
+    """Variety ledger: compare against this channel's recent reels (YouTube's
+    inauthentic-content rule targets near-identical scenarios and titles)."""
+    global _RECENT
+    if _RECENT is None:
+        try:
+            from . import store
+            _RECENT = [r for r in store.get().reels()[:limit] if r.get("stage") != "rejected"]
+        except Exception:  # noqa: BLE001
+            _RECENT = []
+    mine_t = _words(getattr(clip, "title", "") + " " + (clip.hook or ""))
+    mine_g = _words(clip.why or "")
+    out = []
+    for r in _RECENT:
+        their_t = _words((r.get("title") or "") + " " + (r.get("hook") or ""))
+        their_g = _words(r.get("gag") or "")
+        jt = len(mine_t & their_t) / max(1, len(mine_t | their_t))
+        jg = len(mine_g & their_g) / max(1, len(mine_g | their_g))
+        if jt >= 0.6 or jg >= 0.55:
+            out.append(f"too similar to an earlier reel ('{r.get('title') or r.get('hook')}'); pick a different "
+                       f"scene or a clearly different angle and title")
+            break
+    return out
+
+
 def review(reel: Path, clip: Clip, film: dict, analysis, narr_dur: float, speed: float,
            cfg: dict) -> dict:
     """Run both layers, write the scorecard, return it with a verdict."""
-    issues = gates(clip, analysis, narr_dur, speed, cfg)
+    issues = gates(clip, analysis, narr_dur, speed, cfg) + variety_issues(clip)
     card = {"gates": issues, "judge": None, "verdict": "pass", "feedback": ""}
     if issues:
         card["verdict"] = "regenerate"

@@ -1,0 +1,28 @@
+# Wild Facts: real public domain wildlife footage + one surprising true fact.
+name: Wild Facts
+schedule: off                       # turned on once the YouTube channel is connected
+source:
+  pd_year_cutoff: 1929
+  require_identified: false
+  queries:
+    - 'mediatype:(movies) AND creator:("Fish and Wildlife Service")'
+    - 'collection:(prelinger) AND (subject:(animals) OR subject:(wildlife) OR subject:(birds) OR subject:(insects))'
+    - 'mediatype:(movies) AND (subject:(wildlife) OR subject:(birds)) AND licenseurl:(*publicdomain*) AND -subject:(feature film)'
+select:
+  prompt_file: prompts/wild-facts.md
+  reels_per_film: 3
+  candidates_per_film: 16
+edit:
+  styles: [cold_narrated]
+  watermark: "@WildFacts"
+  music_dir: assets/music-nature
+  music_volume: 0.55
+  sfx: false
+  speed: 1.0
+critic:
+  rubric_file: prompts/wild-facts-rubric.md
+  min_len: 10
+  max_len: 30
+post:
+  hashtags: ["#animals", "#wildlife", "#nature", "#animalfacts", "#shorts"]
+  yt_tags: ["animal facts", "wildlife", "nature", "animals", "nature documentary", "shorts"]

@@ -35,9 +35,11 @@ def write_manifest(reel: Path, film: dict, clip: dict, cfg: dict) -> Path:
     m = {
         "reel": str(reel), "cover": str(reel.with_suffix(".jpg")),
         "hook": clip["hook"], "title": clip.get("title") or clip["hook"], "style": clip.get("style"),
-        "caption": full, "platforms": cfg["platforms"],
+        "caption": full, "platforms": cfg["platforms"], "yt_tags": cfg.get("yt_tags"),
         "source": {"identifier": film["identifier"], "title": film["title"],
                    "year": film.get("year"), "license": film.get("reason_free"),
+                   "url": f"https://archive.org/details/{film['identifier']}",
+                   "rights_checked": time.strftime("%Y-%m-%d"),
                    "start": clip["start"], "end": clip["end"], "segments": clip.get("segments"),
                    "payoff": clip.get("payoff"), "sfx": clip.get("sfx")},
         "narration": clip.get("narration", ""), "gag": clip.get("why", ""),
@@ -99,7 +101,8 @@ def instagram_reel(manifest: dict) -> str | None:
 # Unaudited API projects can only upload private videos; set YT_PRIVACY=public
 # after Google's YouTube API audit passes.
 GOOGLE_TOKEN = "https://oauth2.googleapis.com/token"
-YT_SCOPES = "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly"
+YT_SCOPES = ("https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly "
+             "https://www.googleapis.com/auth/yt-analytics.readonly")
 
 
 def youtube_access_token() -> str | None:
@@ -129,12 +132,17 @@ def youtube_short(manifest: dict) -> str | None:
     size = path.stat().st_size
     base = (manifest.get("title") or manifest.get("hook") or "Charlie Chaplin")
     tag = " #charliechaplin" if "chaplin" in base.lower() else ""
+    if len(base) > 80:                       # long fact titles: keep the words, drop the tag
+        tag = ""
     title = (base[:100 - len(tag) - 8] + tag + " #shorts")[:100]
+    if manifest.get("longform"):
+        title = base[:100]
     body = {"snippet": {"title": title, "description": manifest["caption"][:4900], "categoryId": "23",
-                        "tags": ["charlie chaplin", "chaplin", "charlie chaplin comedy", "silent film", "classic comedy",
-                     "funny", "comedy shorts", "public domain"]},
+                        "tags": manifest.get("yt_tags") or ["charlie chaplin", "chaplin", "charlie chaplin comedy",
+                                                 "silent film", "classic comedy", "funny", "comedy shorts"]},
             "status": {"privacyStatus": os.environ.get("YT_PRIVACY", "private"),
-                       "selfDeclaredMadeForKids": False, "embeddable": True}}
+                       "selfDeclaredMadeForKids": False, "embeddable": True,
+                       "containsSyntheticMedia": bool(manifest.get("ai_generated"))}}
     init = requests.post("https://www.googleapis.com/upload/youtube/v3/videos",
                          params={"uploadType": "resumable", "part": "snippet,status"},
                          headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json; charset=UTF-8",
@@ -201,6 +209,7 @@ def tiktok_post(manifest: dict) -> str | None:
     # Private. After the app audit, set TIKTOK_PRIVACY=PUBLIC_TO_EVERYONE.
     body = {
         "post_info": {"title": (manifest.get("title") or manifest["hook"])[:150],
+                      "is_aigc": bool(manifest.get("ai_generated")),
                       "privacy_level": os.environ.get("TIKTOK_PRIVACY", "SELF_ONLY"),
                       "disable_duet": False, "disable_comment": False,
                       "disable_stitch": False, "video_cover_timestamp_ms": 1000},

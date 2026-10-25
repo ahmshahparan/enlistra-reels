@@ -64,7 +64,7 @@ post:
   mode: publish           # draft = write manifest + Typefully draft, never auto-publish; publish = schedule
   typefully_enabled: true
   require_approval: true  # reels wait in the dashboard queue until the owner approves
-  platforms: [instagram, tiktok, youtube_shorts]
+  platforms: [youtube_shorts]   # TikTok and Instagram are posted from the phone queue in the dashboard
   hashtags: ["#charliechaplin", "#chaplin", "#comedy", "#funny", "#silentfilm", "#shorts"]
 
 paths:

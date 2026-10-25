@@ -9,9 +9,17 @@
 import argparse
 import logging
 
-from enlistra import env, pipeline, source
+import os
+import sys
+
+from enlistra import env
 
 env.load()
+# --account must be known before anything touches the store or config
+if "--account" in sys.argv:
+    os.environ["ENLISTRA_ACCOUNT"] = sys.argv[sys.argv.index("--account") + 1]
+
+from enlistra import pipeline, source  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s: %(message)s", datefmt="%H:%M:%S")
 
@@ -28,9 +36,15 @@ def main():
     pp.add_argument("manifest")
     pp.add_argument("--force", action="store_true", help="post even if the critic flagged it")
     pp.add_argument("--config", default="config.yaml")
+    fe = sub.add_parser("feature", help="render a long-form restored feature of one film")
+    fe.add_argument("id")
+    fe.add_argument("--limit", type=float, default=None, help="only the first N seconds (testing)")
+    fe.add_argument("--config", default="config.yaml")
     c = sub.add_parser("check")
     c.add_argument("identifier")
     c.add_argument("--config", default="config.yaml")
+    for sp in (r, pp, c, fe):
+        sp.add_argument("--account", default=os.environ.get("ENLISTRA_ACCOUNT", "silent-comedy"))
     args = ap.parse_args()
 
     cfg = pipeline.load_cfg(args.config)
@@ -42,6 +56,9 @@ def main():
         from pathlib import Path
         from enlistra import post as poster
         print(poster.publish(Path(args.manifest), cfg["post"], force=args.force))
+    elif args.cmd == "feature":
+        from enlistra import longform
+        print(longform.render(args.id, cfg, args.limit))
     elif args.cmd == "check":
         f = source.resolve(args.identifier, cfg["source"])
         print(f.to_json() if f else "NOT free to use (or no usable file)")

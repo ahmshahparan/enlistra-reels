@@ -36,6 +36,7 @@ class Clip:
     segments: list = field(default_factory=list)  # [[abs_start, abs_end], ...]; empty = whole clip
     title: str = ""         # platform title, searchable ("Charlie Chaplin ...")
     style: str = "cold"     # cold = action from frame one, music + sfx; cold_narrated = same plus voice
+    fact_confidence: str | None = None   # Wild Facts: high / medium / low (only high is posted)
 
     def segs(self) -> list:
         return [list(map(float, s)) for s in self.segments] if self.segments else [[self.start, self.end]]

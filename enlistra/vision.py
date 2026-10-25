@@ -149,12 +149,16 @@ def rank(video: Path, film_title: str, year, candidates: list[Clip], want: int,
         msg_text += ("\n\nA previous attempt was rejected by the quality check. Fix these issues "
                      f"with different timing or a different candidate:\n{feedback}")
     content.append({"type": "text", "text": msg_text})
+    system = SYSTEM
+    pf = cfg.get("prompt_file")
+    if pf and Path(pf).exists():
+        system = Path(pf).read_text()
     client = anthropic.Anthropic()
     text, msg = "", None
     for attempt in range(2):
         msg = client.messages.create(
             model=cfg.get("anthropic_model", "claude-sonnet-5-5"), max_tokens=8000,
-            system=SYSTEM + ("\n\nBRAND BRAIN (house rules, override the defaults above):\n" + brain() if brain() else ""),
+            system=system + ("\n\nBRAND BRAIN (house rules, override the defaults above):\n" + brain() if brain() else ""),
             messages=[{"role": "user", "content": content}])
         text = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
         if "{" in text and "}" in text:
@@ -185,6 +189,7 @@ def apply_picks(candidates: list[Clip], picks: list[dict]) -> list[Clip]:
         c.segments = segs
         c.narration = p.get("narration", "")
         c.title = (p.get("title") or "").strip()
+        c.fact_confidence = p.get("fact_confidence")
         c.payoff = float(p["payoff"]) if p.get("payoff") is not None else None
         c.sfx = [s for s in p.get("sfx", []) if s.get("kind") in SFX_KINDS]
         out.append(c)

@@ -31,7 +31,9 @@ def _now() -> str:
 class FileStore:
     kind = "file"
 
-    def __init__(self, work: Path):
+    def __init__(self, work: Path, account: str = "silent-comedy"):
+        self.account = account
+        self.brain_dir = Path("brain") if account == "silent-comedy" else Path("brain") / account
         self.work = Path(work)
         self.out = self.work / "out"
         self.out.mkdir(parents=True, exist_ok=True)
@@ -114,15 +116,16 @@ class FileStore:
         (self.work / f"{key}.json").write_text(json.dumps(value, indent=2))
 
     def brain(self, name: str = "voice") -> str:
-        p = Path("brain") / f"{name}.md"
+        p = self.brain_dir / f"{name}.md"
         return p.read_text().strip() if p.exists() else ""
 
     def brains(self) -> dict:
-        return {p.stem: p.read_text() for p in sorted(Path("brain").glob("*.md"))} if Path("brain").exists() else {}
+        d = self.brain_dir
+        return {p.stem: p.read_text() for p in sorted(d.glob("*.md"))} if d.exists() else {}
 
     def set_brain(self, name: str, text: str):
-        Path("brain").mkdir(exist_ok=True)
-        (Path("brain") / f"{name}.md").write_text(text)
+        self.brain_dir.mkdir(parents=True, exist_ok=True)
+        (self.brain_dir / f"{name}.md").write_text(text)
 
     def paused(self) -> bool:
         return (self.work / "PAUSED").exists()
@@ -181,10 +184,9 @@ class SupabaseStore(FileStore):
     BUCKET = "reels"
 
     def __init__(self, work: Path, url: str, key: str, account: str = ACCOUNT):
-        super().__init__(work)
+        super().__init__(work, account)
         self.url = url.rstrip("/")
         self.key = key
-        self.account = account
         self.h = {"apikey": key, "Authorization": f"Bearer {key}"}
         self.cache = self.work / "cache"
         self.cache.mkdir(parents=True, exist_ok=True)
@@ -290,6 +292,7 @@ class SupabaseStore(FileStore):
                  "title": r.get("title"), "style": r.get("style"),
                  "narration": r["narration"], "gag": r["gag"], "source": r["source"], "status": r.get("status") or {},
                  "critic": r.get("critic") or {}, "platforms": list((r.get("status") or {}).keys()),
+                 "ai_generated": (r.get("style") == "character"),
                  "created": r.get("created_at")}
             man.write_text(json.dumps(m, indent=2))
         return mp4, man
@@ -358,17 +361,43 @@ class SupabaseStore(FileStore):
 
 
 # ===================================================================== factory
-_STORE = None
+# One store per account (channel). The current account comes from, in order:
+# an explicit argument, the calling thread (store.use), or ENLISTRA_ACCOUNT.
+import threading as _threading
+
+_STORES: dict = {}
+_LOCAL = _threading.local()
 
 
-def get(work: str | Path = "work"):
-    global _STORE
-    if _STORE is None:
+def current_account() -> str:
+    return getattr(_LOCAL, "account", None) or os.environ.get("ENLISTRA_ACCOUNT", "silent-comedy")
+
+
+def use(account: str | None):
+    """Bind this thread to an account (None = back to the default)."""
+    _LOCAL.account = account
+
+
+def get(work: str | Path = "work", account: str | None = None):
+    account = account or current_account()
+    if account not in _STORES:
         url, key = os.environ.get("SUPABASE_URL"), os.environ.get("SUPABASE_SECRET_KEY")
         if url and key:
-            _STORE = SupabaseStore(Path(work), url, key)
-            log.info("store: supabase (%s)", ACCOUNT)
+            _STORES[account] = SupabaseStore(Path(work), url, key, account)
+            log.info("store: supabase (%s)", account)
         else:
-            _STORE = FileStore(Path(work))
-            log.info("store: files under %s", work)
-    return _STORE
+            _STORES[account] = FileStore(Path(work) if account == "silent-comedy" else Path(work) / account, account)
+            log.info("store: files under %s", _STORES[account].work)
+    return _STORES[account]
+
+
+def accounts() -> list[dict]:
+    """All channels. Supabase: the accounts table; files: accounts/*.yaml."""
+    url, key = os.environ.get("SUPABASE_URL"), os.environ.get("SUPABASE_SECRET_KEY")
+    if url and key:
+        r = requests.get(f"{url.rstrip('/')}/rest/v1/accounts", params={"select": "*", "order": "created_at"},
+                         headers={"apikey": key, "Authorization": f"Bearer {key}"}, timeout=30)
+        if r.status_code < 300:
+            return r.json()
+    return [{"id": p.stem, "name": p.stem} for p in sorted(Path("accounts").glob("*.yaml"))] or \
+           [{"id": "silent-comedy", "name": "Enlistra Reels"}]

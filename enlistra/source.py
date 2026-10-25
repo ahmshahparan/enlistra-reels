@@ -57,7 +57,10 @@ def is_free_to_use(meta: dict, pd_year_cutoff: int) -> tuple[bool, str]:
     rights = str(meta.get("rights") or "").lower()
     if year and year < pd_year_cutoff:
         return True, f"published {year}, before {pd_year_cutoff} (US public domain)"
-    if any(h in lic.lower() for h in FREE_LICENSE_HINTS):
+    low = lic.lower()
+    if "creativecommons.org" in low and ("-nc" in low or "-nd" in low or "/nc" in low or "/nd" in low):
+        return False, f"license {lic} forbids commercial use or edits"
+    if any(h in low for h in FREE_LICENSE_HINTS):
         return True, f"license {lic}"
     if "public domain" in rights:
         return True, f"rights field: {rights[:60]}"

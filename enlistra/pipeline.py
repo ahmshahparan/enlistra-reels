@@ -22,8 +22,22 @@ from . import analyze, critic, edit, post, select, source, store, vision
 log = logging.getLogger("pipeline")
 
 
-def load_cfg(path: str = "config.yaml") -> dict:
-    return yaml.safe_load(Path(path).read_text())
+def _merge(base: dict, over: dict) -> dict:
+    out = dict(base)
+    for k, v in (over or {}).items():
+        out[k] = _merge(out[k], v) if isinstance(v, dict) and isinstance(out.get(k), dict) else v
+    return out
+
+
+def load_cfg(path: str = "config.yaml", account: str | None = None) -> dict:
+    """Base config merged with accounts/<account>.yaml (the channel's overrides)."""
+    cfg = yaml.safe_load(Path(path).read_text())
+    account = account or store.current_account()
+    over = Path("accounts") / f"{account}.yaml"
+    if over.exists():
+        cfg = _merge(cfg, yaml.safe_load(over.read_text()) or {})
+    cfg["account"] = account
+    return cfg
 
 
 def paused(cfg: dict) -> bool:
@@ -182,6 +196,13 @@ def process_film(film, cfg: dict, work: Path, post_now: bool) -> list[Path]:
 
 def run(cfg: dict, films: int = 1, identifier: str | None = None, post_now: bool = True) -> list[Path]:
     work = Path(cfg["paths"]["work"])
+    kind = cfg.get("pipeline", "film_clips")
+    if kind != "film_clips":
+        log.info("%s uses the %s pipeline, which runs from its own module", cfg.get("account"), kind)
+        if kind == "character":
+            from . import character
+            return character.run(cfg, post_now=post_now)
+        return []
     if paused(cfg):
         log.info("paused (kill switch); not running")
         activity(cfg, "system", "Run skipped: the kill switch is on")

@@ -72,7 +72,7 @@ pre.log{font:11px/1.4 var(--mono);color:var(--muted);background:#0e1115;border:1
 </head>
 <body>
 <header>
-  <div class="brand">AI NATIVE REELS<b>ENLISTRA REELS · operator</b></div>
+  <div class="brand">ENLISTRA · OPERATOR<b><select id="acct" onchange="switchAcct(this.value)" style="font:inherit;background:transparent;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:2px 6px"></select></b></div>
   <div class="pills" id="pills"></div>
   <button id="runBtn" class="primary" onclick="runNow()">Run now</button>
   <button id="killBtn" class="danger" onclick="togglePause()">Kill switch</button>
@@ -98,10 +98,16 @@ pre.log{font:11px/1.4 var(--mono);color:var(--muted);background:#0e1115;border:1
       <h2>Controls</h2>
       <div style="display:flex;flex-direction:column;gap:8px">
         <div class="meta" id="schedTxt"></div>
+        <div style="display:flex;gap:8px;align-items:center"><button onclick="post('/api/analyst').then(load)">Refresh stats</button><span class="meta" id="anTxt">stats refresh nightly at 3:30</span></div>
         <div style="display:flex;gap:8px;align-items:center" id="ytRow"></div>
-        <div style="display:flex;gap:8px;align-items:center"><input type="text" id="runId" placeholder="Internet Archive id (optional)"><button onclick="runNow(document.getElementById('runId').value)">Run id</button></div>
+        <div style="display:flex;gap:8px;align-items:center"><input type="text" id="runId" placeholder="Internet Archive id (optional)"><button onclick="runNow(document.getElementById('runId').value)">Run id</button><button onclick="post('/api/feature',{id:document.getElementById('runId').value}).then(load)">Long-form</button></div>
         <details><summary class="meta" style="cursor:pointer">pipeline log</summary><pre class="log" id="log"></pre></details>
       </div>
+    </section>
+    <section id="bibleSec" style="display:none">
+      <h2>Character sheet</h2>
+      <div id="bibleBody" class="meta"></div>
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap"><button onclick="post('/api/bible/draft').then(load)">Draft sheet</button><button class="ok" onclick="post('/api/bible/approve',{ok:true}).then(load)">Approve</button><button class="danger" onclick="post('/api/bible/approve',{ok:false}).then(load)">Redraw</button></div>
     </section>
     <section>
       <h2>Brand brain</h2>
@@ -121,24 +127,30 @@ pre.log{font:11px/1.4 var(--mono);color:var(--muted);background:#0e1115;border:1
 </div></div>
 
 <script>
+let ACC=new URLSearchParams(location.search).get('a')||'silent-comedy';
+const q=p=>p+(p.includes('?')?'&':'?')+'a='+encodeURIComponent(ACC);
+function switchAcct(a){ACC=a;history.replaceState(null,'','?a='+encodeURIComponent(a));brainKey=null;brainDirty=false;load()}
 let S=null, filter='pending', brainKey=null, brainDirty=false, editing=null;
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function cls(v){return v>=4?'good':v>=3?'mid':'low'}
 
 async function load(){
-  try{ S=await (await fetch('/api/state')).json(); render(); $('#live').textContent='● live'; }
+  try{ S=await (await fetch(q('/api/state'))).json(); render(); $('#live').textContent='● live'; }
   catch(e){ $('#live').textContent='○ offline'; }
 }
 function render(){
   const c=S.counts||{};
+  const sel=$('#acct'); const opts=(S.accounts||[]).map(a=>`<option value="${esc(a.id)}" ${a.id===ACC?'selected':''}>${esc(a.name||a.id)}</option>`).join('');
+  if(sel.innerHTML!==opts) sel.innerHTML=opts;
   $('#pills').innerHTML=
     `<span class="pill ${S.paused?'bad':'on'}">${S.paused?'KILL SWITCH ON':'RUNNING'}</span>`+
     `<span class="pill ${S.schedule.length?'on':''}">schedule ${S.schedule.length?S.schedule.join(' and '):'off'}</span>`+
     `<span class="pill">${S.store==='supabase'?'cloud store':'local files'}</span>`+
     `<span class="pill ${S.require_approval?'warn':'on'}">${S.require_approval?'approval required':'auto-post'}</span>`+
     `<span class="pill ${S.privacy==='SELF_ONLY'?'warn':'on'}">tiktok ${S.privacy==='SELF_ONLY'?'private (pending review)':'public'}</span>`+
-    `<span class="pill">critic ${S.config.target}/${S.config.accept}</span>`;
+    `<span class="pill">critic ${S.config.target}/${S.config.accept}</span>`+
+    (S.analyst&&S.analyst.views!=null?`<span class="pill on">${Number(S.analyst.views).toLocaleString()} views on ${S.analyst.videos} videos</span>`:'');
   const running=!!S.running;
   $('#runBtn').disabled=running; $('#runBtn').textContent=running?'Running…':'Run now';
   $('#killBtn').textContent=S.paused?'Resume':'Kill switch';
@@ -150,10 +162,14 @@ function render(){
   $('#grid').innerHTML=reels.length?reels.map(card).join(''):`<div class="empty">nothing here${filter==='pending'?' · press Run now to make a reel':''}</div>`;
   $('#feed').innerHTML=S.activity.map(e=>`<div class="ev"><span class="t">${esc(e.t.slice(11,16))}</span><span class="k ${esc(e.kind)}">${esc(e.kind)}</span><span>${esc(e.text)}</span></div>`).join('')||'<div class="empty">no activity yet</div>';
   $('#log').textContent=(S.log||[]).join('\n');
+  const isChar=S.pipeline==='character'; $('#bibleSec').style.display=isChar?'':'none';
+  if(isChar){const b=S.bible||{}; const v=b.views||{};
+    $('#bibleBody').innerHTML=(Object.keys(v).length?`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">${Object.values(v).map(n=>`<img src="${q('/media/'+n)}" style="width:100%;border-radius:8px;border:1px solid var(--line)">`).join('')}</div>`:'No sheet yet. Edit bible.md below, then Draft sheet.')+
+    `<div style="margin-top:6px">${b.approved?'<span class="pill on">approved</span>':'<span class="pill warn">not approved</span>'} <span class="pill">spent $${(S.gen_spend||0).toFixed(2)} of $${S.gen_budget} this month</span></div>`;}
   const y=S.youtube||{};
   $('#ytRow').innerHTML=!y.configured?'<span class="meta">YouTube: waiting for Google Cloud keys</span>':
-    y.connected?`<span class="pill on">YouTube: ${esc(y.channel||'connected')} (${esc(y.privacy)})</span><a href="/oauth/youtube/start"><button>Reconnect</button></a>`:
-    '<a href="/oauth/youtube/start"><button class="primary">Connect YouTube</button></a><span class="meta">sign in with the channel\'s Gmail</span>';
+    y.connected?`<span class="pill on">YouTube: ${esc(y.channel||'connected')} (${esc(y.privacy)})</span><a href="${q('/oauth/youtube/start')}"><button>Reconnect</button></a>`:
+    `<a href="${q('/oauth/youtube/start')}"><button class="primary">Connect YouTube</button></a><span class="meta">pick this channel when Google asks</span>`;
   const keys=Object.keys(S.brain);
   if(!brainKey&&keys.length) brainKey=keys[0];
   $('#brainTabs').innerHTML=keys.map(k=>`<button class="${k===brainKey?'active':''}" onclick="pickBrain('${k}')">${k}.md</button>`).join('');
@@ -163,21 +179,27 @@ function card(r){
   const sc=r.scores?Object.entries(r.scores).map(([k,v])=>`<div class="sc ${cls(v)}"><b>${v}</b>${k.slice(0,7)}</div>`).join(''):'';
   const job=r.job&&r.job.status==='running'?`<div class="meta" style="color:var(--amber)">working…</div>`:r.job&&r.job.status==='error'?`<div class="meta" style="color:var(--red)">${esc(r.job.text)}</div>`:'';
   const fix=r.fix?`<div class="fix"><b>critic:</b> ${esc(r.fix)}</div>`:'';
+  const pf=r.perf?`<div class="meta" style="color:var(--green)">${Number(r.perf.views).toLocaleString()} views · ${r.perf.likes||0} likes${r.perf.completion?` · ${Math.round(r.perf.completion)}% watched`:''}</div>`:'';
   const st=Object.entries(r.status||{}).filter(([k])=>k!=='typefully').map(([k,v])=>`${k}: ${esc(String(v).slice(0,60))}`).join(' · ');
   const a=[];
   if(r.stage==='pending'||r.stage==='flagged'){a.push(`<button class="ok" onclick="act('approve','${r.name}')">Approve and post</button>`);a.push(`<button onclick="openEdit('${r.name}')">Edit</button>`);a.push(`<button class="danger" onclick="rejectReel('${r.name}')">Reject</button>`)}
   if(r.stage==='rejected'){a.push(`<button onclick="act('restore','${r.name}')">Back to queue</button>`);a.push(`<button onclick="openEdit('${r.name}')">Edit</button>`)}
-  if(r.stage==='posted'){a.push(`<button onclick="openEdit('${r.name}')">Edit and redo</button>`)}
+  if(r.stage==='posted'){
+    const tt=String((r.status||{}).tiktok||'');
+    a.push(`<a href="${q(r.video+'?dl=1').replace('?dl=1?','?dl=1&')}"><button>Download</button></a>`);
+    a.push(`<button onclick="copyCap('${r.name}')">Copy caption</button>`);
+    if(!tt.startsWith('posted')) a.push(`<button class="ok" onclick="post('/api/manual/${r.name}',{platform:'tiktok'}).then(load)">Mark posted on TikTok</button>`);
+    a.push(`<button onclick="openEdit('${r.name}')">Edit and redo</button>`)}
   if(r.stage==='approved'||r.stage==='posting'){a.push(`<button onclick="act('restore','${r.name}')">Back to queue</button>`)}
-  return `<div class="card"><video src="${r.video}" poster="${r.cover}" controls preload="none" muted></video><div class="body">
+  return `<div class="card"><video src="${q(r.video)}" poster="${q(r.cover)}" controls preload="none" muted></video><div class="body">
     <div style="display:flex;justify-content:space-between;align-items:center"><span class="tag ${r.stage}">${r.stage}</span><span class="meta">${esc((r.created||'').slice(0,16).replace('T',' '))}</span></div>
     <div class="hook">${esc(r.hook)}</div>
     <div class="meta">${esc(r.source&&r.source.title)}${r.source&&r.source.year?' · '+r.source.year:''} · ${r.name}</div>${r.owner_note?`<div class="meta">note: ${esc(r.owner_note)}</div>`:''}
     <div class="narr">${esc(r.narration)}</div>
-    <div class="scores">${sc}</div>${(r.gates||[]).length?`<div class="fix"><b>gates:</b> ${esc(r.gates.join('; '))}</div>`:''}${fix}${st?`<div class="meta">${st}</div>`:''}${job}
+    <div class="scores">${sc}</div>${(r.gates||[]).length?`<div class="fix"><b>gates:</b> ${esc(r.gates.join('; '))}</div>`:''}${fix}${pf}${st?`<div class="meta">${st}</div>`:''}${job}
     <div class="actions">${a.join('')}</div></div></div>`;
 }
-async function post(url,body){const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})});const j=await r.json().catch(()=>({}));if(!r.ok)alert(j.error||'failed');return j}
+async function post(url,body){const r=await fetch(q(url),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})});const j=await r.json().catch(()=>({}));if(!r.ok)alert(j.error||'failed');return j}
 async function act(kind,name){await post(`/api/${kind}/${name}`);load()}
 async function rejectReel(name){const note=prompt('Why? (goes into the activity feed; optional)')||'';await post(`/api/reject/${name}`,{note});load()}
 async function runNow(id){await post('/api/run',{films:1,id:id||null});load()}
@@ -185,6 +207,7 @@ async function togglePause(){await post('/api/pause',{on:!S.paused});load()}
 function pickBrain(k){brainKey=k;brainDirty=false;render()}
 $('#brainText').addEventListener('input',()=>brainDirty=true);
 async function saveBrain(){await post(`/api/brain/${brainKey}`,{text:$('#brainText').value});brainDirty=false;$('#brainMsg').textContent='saved';setTimeout(()=>$('#brainMsg').textContent='used by the selector and the critic on the next run',2000);load()}
+async function copyCap(name){const r=S.reels.find(x=>x.name===name);const t=(r.title?r.title+'\n\n':'')+(r.caption||'');try{await navigator.clipboard.writeText(t);alert('Caption copied')}catch(e){prompt('Copy the caption',t)}}
 function openEdit(name){editing=name;const r=S.reels.find(x=>x.name===name);$('#mName').textContent=name;$('#mHook').value=r.hook||'';$('#mNarr').value=r.narration||'';$('#modal').classList.add('open')}
 function closeModal(){$('#modal').classList.remove('open')}
 async function submitRerender(){await post(`/api/rerender/${editing}`,{hook:$('#mHook').value,narration:$('#mNarr').value});closeModal();load()}

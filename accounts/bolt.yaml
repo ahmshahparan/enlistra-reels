@@ -1,0 +1,16 @@
+# Bolt: original wordless character series, generated from an approved character bible.
+name: Bolt
+schedule: off            # generation starts after the character bible is approved
+pipeline: character
+character:
+  monthly_budget_usd: 250
+  video_model: veo-3.1-fast-generate-preview
+  image_model: gemini-2.5-flash-image
+  video_usd_per_second: 0.15
+  image_usd: 0.04
+edit:
+  watermark: "@BoltTheRobot"
+  music_volume: 0.45
+post:
+  hashtags: ["#bolt", "#animation", "#funny", "#robot", "#shorts"]
+  yt_tags: ["animation", "funny animation", "robot", "cartoon", "comedy shorts", "no dialogue"]
