@@ -66,6 +66,11 @@ if "access_token" not in d:
 d["obtained_at"] = int(time.time())
 TOKEN_FILE.parent.mkdir(exist_ok=True)
 TOKEN_FILE.write_text(json.dumps(d, indent=2))
+try:
+    from enlistra import store
+    store.get().set_setting("tiktok_token", d)
+except Exception as e:  # noqa: BLE001
+    print("token kept locally only:", e)
 me = requests.get("https://open.tiktokapis.com/v2/user/info/?fields=display_name,open_id",
                   headers={"Authorization": f"Bearer {d['access_token']}"}, timeout=30).json()
 name = me.get("data", {}).get("user", {}).get("display_name", "?")
