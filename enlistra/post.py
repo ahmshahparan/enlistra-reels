@@ -8,7 +8,7 @@ attribution) written next to it. Then, depending on `post.mode`:
 Platform notes (each needs its own developer app and tokens, set as env vars):
   Instagram Reels  IG_USER_ID, IG_ACCESS_TOKEN  (Graph API; needs a PUBLIC video URL,
                    so set PUBLIC_BASE_URL to wherever `work/out` is served from)
-  YouTube Shorts   YT_CLIENT_SECRETS (OAuth JSON) and a stored refresh token
+  YouTube Shorts   YT_CLIENT_ID, YT_CLIENT_SECRET; connect the channel from the dashboard
   TikTok           TIKTOK_ACCESS_TOKEN  (Content Posting API; app must be approved
                    for direct post, otherwise it lands in the user's inbox as a draft)
 """
@@ -92,30 +92,60 @@ def instagram_reel(manifest: dict) -> str | None:
 
 
 # ---------------------------------------------------------------- YouTube
+# OAuth client: YT_CLIENT_ID / YT_CLIENT_SECRET (Google Cloud, Web application).
+# The channel owner connects once via the dashboard ("Connect YouTube"); the
+# refresh token is kept in the store under "youtube_token".
+# Unaudited API projects can only upload private videos; set YT_PRIVACY=public
+# after Google's YouTube API audit passes.
+GOOGLE_TOKEN = "https://oauth2.googleapis.com/token"
+YT_SCOPES = "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly"
+
+
+def youtube_access_token() -> str | None:
+    cid, sec = os.environ.get("YT_CLIENT_ID"), os.environ.get("YT_CLIENT_SECRET")
+    st = store.get()
+    d = st.setting("youtube_token")
+    if not (cid and sec and d and d.get("refresh_token")):
+        return None
+    if time.time() < d.get("obtained_at", 0) + d.get("expires_in", 0) - 300:
+        return d["access_token"]
+    r = requests.post(GOOGLE_TOKEN, data={"client_id": cid, "client_secret": sec, "grant_type": "refresh_token",
+                                          "refresh_token": d["refresh_token"]}, timeout=30).json()
+    if "access_token" not in r:
+        log.error("YouTube refresh failed: %s", r)
+        return None
+    d.update(access_token=r["access_token"], expires_in=r.get("expires_in", 3600), obtained_at=int(time.time()))
+    st.set_setting("youtube_token", d)
+    return d["access_token"]
+
+
 def youtube_short(manifest: dict) -> str | None:
-    """Requires google-api-python-client + an OAuth refresh token in YT_TOKEN_JSON."""
-    tok = os.environ.get("YT_TOKEN_JSON")
+    tok = youtube_access_token()
     if not tok:
-        log.info("YT_TOKEN_JSON not set; skipping YouTube")
+        log.info("YouTube not connected (dashboard > Connect YouTube); skipping")
         return None
-    try:
-        from google.oauth2.credentials import Credentials
-        from googleapiclient.discovery import build
-        from googleapiclient.http import MediaFileUpload
-    except ImportError:
-        log.warning("google-api-python-client not installed; skipping YouTube")
-        return None
-    creds = Credentials.from_authorized_user_info(json.loads(Path(tok).read_text()))
-    yt = build("youtube", "v3", credentials=creds)
-    body = {"snippet": {"title": manifest["hook"][:95] + " #Shorts",
-                        "description": manifest["caption"], "categoryId": "23"},
-            "status": {"privacyStatus": "public", "selfDeclaredMadeForKids": False}}
-    media = MediaFileUpload(manifest["reel"], mimetype="video/mp4", resumable=True)
-    req = yt.videos().insert(part="snippet,status", body=body, media_body=media)
-    resp = None
-    while resp is None:
-        _, resp = req.next_chunk()
-    return resp.get("id")
+    path = Path(manifest["reel"])
+    size = path.stat().st_size
+    title = (manifest["hook"] or "Silent comedy")[:90] + " #Shorts"
+    body = {"snippet": {"title": title, "description": manifest["caption"][:4900], "categoryId": "23",
+                        "tags": ["silent film", "classic comedy", "Chaplin", "public domain", "shorts"]},
+            "status": {"privacyStatus": os.environ.get("YT_PRIVACY", "private"),
+                       "selfDeclaredMadeForKids": False, "embeddable": True}}
+    init = requests.post("https://www.googleapis.com/upload/youtube/v3/videos",
+                         params={"uploadType": "resumable", "part": "snippet,status"},
+                         headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json; charset=UTF-8",
+                                  "X-Upload-Content-Type": "video/mp4", "X-Upload-Content-Length": str(size)},
+                         data=json.dumps(body), timeout=60)
+    if init.status_code != 200:
+        raise RuntimeError(f"YouTube init {init.status_code}: {init.text[:300]}")
+    with open(path, "rb") as fh:
+        up = requests.put(init.headers["Location"], data=fh, timeout=600,
+                          headers={"Authorization": f"Bearer {tok}", "Content-Type": "video/mp4"})
+    if up.status_code not in (200, 201):
+        raise RuntimeError(f"YouTube upload {up.status_code}: {up.text[:300]}")
+    vid = up.json().get("id")
+    log.info("YouTube video %s (%s)", vid, body["status"]["privacyStatus"])
+    return f"https://youtube.com/shorts/{vid}"
 
 
 # ---------------------------------------------------------------- TikTok

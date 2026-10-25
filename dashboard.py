@@ -164,6 +164,52 @@ def index():
     return Response((Path(__file__).parent / "dashboard.html").read_text(), mimetype="text/html")
 
 
+# ------------------------------------------------------------------ YouTube connect
+@app.get("/oauth/youtube/start")
+def yt_start():
+    import secrets as _s
+    from urllib.parse import urlencode
+    cid = os.environ.get("YT_CLIENT_ID")
+    if not cid:
+        return "YT_CLIENT_ID is not set on the server yet.", 400
+    state = _s.token_urlsafe(16)
+    ST.set_setting("youtube_oauth_state", state)
+    q = urlencode({"client_id": cid, "redirect_uri": _yt_redirect(), "response_type": "code",
+                   "scope": poster.YT_SCOPES, "access_type": "offline", "prompt": "consent",
+                   "include_granted_scopes": "true", "state": state})
+    return Response(status=302, headers={"Location": "https://accounts.google.com/o/oauth2/v2/auth?" + q})
+
+
+def _yt_redirect() -> str:
+    base = os.environ.get("PUBLIC_URL") or request.host_url.rstrip("/").replace("http://", "https://")
+    return base + "/oauth/youtube/callback"
+
+
+@app.get("/oauth/youtube/callback")
+def yt_callback():
+    import requests as rq
+    if request.args.get("state") != ST.setting("youtube_oauth_state"):
+        return "State mismatch; start again from the dashboard.", 400
+    code = request.args.get("code")
+    if not code:
+        return f"YouTube connection cancelled: {request.args.get('error')}", 400
+    r = rq.post(poster.GOOGLE_TOKEN, data={"code": code, "client_id": os.environ["YT_CLIENT_ID"],
+                                           "client_secret": os.environ["YT_CLIENT_SECRET"],
+                                           "redirect_uri": _yt_redirect(), "grant_type": "authorization_code"},
+                timeout=30).json()
+    if "refresh_token" not in r:
+        return f"Google did not return a refresh token: {r}", 400
+    r["obtained_at"] = int(time.time())
+    ch = rq.get("https://www.googleapis.com/youtube/v3/channels", params={"part": "snippet", "mine": "true"},
+                headers={"Authorization": f"Bearer {r['access_token']}"}, timeout=30).json()
+    items = ch.get("items") or []
+    r["channel"] = {"id": items[0]["id"], "title": items[0]["snippet"]["title"]} if items else None
+    ST.set_setting("youtube_token", r)
+    name = r["channel"]["title"] if r["channel"] else "(no channel on this Google account yet)"
+    ST.activity("owner", f"YouTube connected: {name}")
+    return Response(status=302, headers={"Location": "/"})
+
+
 @app.get("/health")
 def health():
     return jsonify(ok=True, store=ST.kind)
@@ -199,11 +245,18 @@ def state():
         "paused": ST.paused(), "schedule": SCHEDULE, "tz": str(TZ), "store": ST.kind,
         "require_approval": bool(CFG["post"].get("require_approval", True)),
         "privacy": os.environ.get("TIKTOK_PRIVACY", "SELF_ONLY"),
+        "youtube": _yt_status(),
         "jobs": jobs, "running": RUN_LOCK.locked() or (jobs.get("run") or {}).get("status") == "running",
         "log": tail, "platform": platform.system(), "brain": ST.brains(),
         "config": {"reels_per_film": CFG["select"]["reels_per_film"], "target": CFG.get("critic", {}).get("target_score"),
                    "accept": CFG.get("critic", {}).get("accept_score"), "platforms": CFG["post"]["platforms"]},
     })
+
+
+def _yt_status() -> dict:
+    t = ST.setting("youtube_token") or {}
+    return {"configured": bool(os.environ.get("YT_CLIENT_ID")), "connected": bool(t.get("refresh_token")),
+            "channel": (t.get("channel") or {}).get("title"), "privacy": os.environ.get("YT_PRIVACY", "private")}
 
 
 @app.post("/api/approve/<name>")

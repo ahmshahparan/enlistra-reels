@@ -98,6 +98,7 @@ pre.log{font:11px/1.4 var(--mono);color:var(--muted);background:#0e1115;border:1
       <h2>Controls</h2>
       <div style="display:flex;flex-direction:column;gap:8px">
         <div class="meta" id="schedTxt"></div>
+        <div style="display:flex;gap:8px;align-items:center" id="ytRow"></div>
         <div style="display:flex;gap:8px;align-items:center"><input type="text" id="runId" placeholder="Internet Archive id (optional)"><button onclick="runNow(document.getElementById('runId').value)">Run id</button></div>
         <details><summary class="meta" style="cursor:pointer">pipeline log</summary><pre class="log" id="log"></pre></details>
       </div>
@@ -149,6 +150,10 @@ function render(){
   $('#grid').innerHTML=reels.length?reels.map(card).join(''):`<div class="empty">nothing here${filter==='pending'?' · press Run now to make a reel':''}</div>`;
   $('#feed').innerHTML=S.activity.map(e=>`<div class="ev"><span class="t">${esc(e.t.slice(11,16))}</span><span class="k ${esc(e.kind)}">${esc(e.kind)}</span><span>${esc(e.text)}</span></div>`).join('')||'<div class="empty">no activity yet</div>';
   $('#log').textContent=(S.log||[]).join('\n');
+  const y=S.youtube||{};
+  $('#ytRow').innerHTML=!y.configured?'<span class="meta">YouTube: waiting for Google Cloud keys</span>':
+    y.connected?`<span class="pill on">YouTube: ${esc(y.channel||'connected')} (${esc(y.privacy)})</span><a href="/oauth/youtube/start"><button>Reconnect</button></a>`:
+    '<a href="/oauth/youtube/start"><button class="primary">Connect YouTube</button></a><span class="meta">sign in with the channel\'s Gmail</span>';
   const keys=Object.keys(S.brain);
   if(!brainKey&&keys.length) brainKey=keys[0];
   $('#brainTabs').innerHTML=keys.map(k=>`<button class="${k===brainKey?'active':''}" onclick="pickBrain('${k}')">${k}.md</button>`).join('');
