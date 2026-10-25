@@ -1,0 +1,10 @@
+work
+assets/raw
+out_fallback
+_old
+.venv
+__pycache__
+*.pyc
+secrets.env
+*.command
+*.tgz

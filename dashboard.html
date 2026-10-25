@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Enlistra Reels · Operator</title>
+<style>
+:root{--bg:#0b0d10;--panel:#12151a;--panel2:#171b21;--line:#242a33;--text:#e6e9ee;--muted:#8a93a3;
+  --amber:#f2b134;--green:#45d483;--red:#ff5c5c;--blue:#5aa9ff;--cream:#f3e9d2;--mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Helvetica,Arial,sans-serif}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px}
+header{display:flex;align-items:center;gap:18px;padding:12px 20px;border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0;z-index:5}
+.brand{font-family:var(--mono);letter-spacing:.14em;font-size:12px;color:var(--amber)}
+.brand b{color:var(--text);letter-spacing:.06em;font-size:15px;display:block}
+.pills{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
+.pill{font-family:var(--mono);font-size:11px;padding:5px 10px;border:1px solid var(--line);border-radius:999px;color:var(--muted);background:var(--panel2)}
+.pill.on{border-color:var(--green);color:var(--green)}
+.pill.warn{border-color:var(--amber);color:var(--amber)}
+.pill.bad{border-color:var(--red);color:var(--red)}
+button{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--panel2);color:var(--text);padding:7px 12px;border-radius:7px}
+button:hover{border-color:var(--muted)}
+button.primary{background:var(--amber);border-color:var(--amber);color:#1a1200;font-weight:600}
+button.danger{border-color:var(--red);color:var(--red)}
+button.ok{border-color:var(--green);color:var(--green)}
+button:disabled{opacity:.45;cursor:default}
+main{display:grid;grid-template-columns:1fr 380px;gap:16px;padding:16px 20px;max-width:1600px}
+@media(max-width:1000px){main{grid-template-columns:1fr}}
+section{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+h2{font-family:var(--mono);font-size:11px;letter-spacing:.14em;color:var(--muted);margin:0 0 12px;text-transform:uppercase;display:flex;align-items:center;gap:10px}
+h2 .n{color:var(--amber)}
+.flow{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-bottom:16px}
+.step{background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:10px;font-family:var(--mono);font-size:11px}
+.step .k{color:var(--muted);font-size:10px;letter-spacing:.1em}
+.step .v{font-size:18px;margin-top:4px;color:var(--cream)}
+.step.live{border-color:var(--amber)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.card{background:var(--panel2);border:1px solid var(--line);border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
+.card video{width:100%;aspect-ratio:9/16;max-height:420px;background:#000;object-fit:contain}
+.card .body{padding:12px;display:flex;flex-direction:column;gap:8px;flex:1}
+.hook{font-size:16px;font-weight:600;color:var(--cream)}
+.meta{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.narr{font-style:italic;color:#c9cfd8;border-left:2px solid var(--amber);padding-left:8px}
+.scores{display:grid;grid-template-columns:repeat(6,1fr);gap:4px}
+.sc{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:5px 4px;text-align:center;font-family:var(--mono);font-size:10px;color:var(--muted)}
+.sc b{display:block;font-size:14px;color:var(--text)}
+.sc.good b{color:var(--green)}.sc.mid b{color:var(--amber)}.sc.low b{color:var(--red)}
+.fix{font-size:12px;color:var(--muted)}
+.fix b{color:var(--amber);font-weight:500}
+.tag{font-family:var(--mono);font-size:10px;letter-spacing:.1em;padding:3px 7px;border-radius:5px;border:1px solid var(--line);text-transform:uppercase}
+.tag.pending{color:var(--amber);border-color:var(--amber)}.tag.posted{color:var(--green);border-color:var(--green)}
+.tag.flagged{color:var(--red);border-color:var(--red)}.tag.rejected{color:var(--muted)}.tag.posting,.tag.approved{color:var(--blue);border-color:var(--blue)}
+.actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:auto}
+.feed{font-family:var(--mono);font-size:12px;max-height:60vh;overflow:auto;display:flex;flex-direction:column;gap:6px}
+.ev{display:grid;grid-template-columns:52px 70px 1fr;gap:8px;padding:6px 0;border-bottom:1px solid var(--line)}
+.ev .t{color:var(--muted)}.ev .k{letter-spacing:.08em;font-size:10px;text-transform:uppercase}
+.k.critic{color:var(--blue)}.k.post{color:var(--green)}.k.queue{color:var(--amber)}.k.owner{color:var(--cream)}.k.error{color:var(--red)}.k.source{color:#b08cff}.k.system{color:var(--muted)}
+textarea{width:100%;min-height:150px;background:#0e1115;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:10px;font:13px/1.45 var(--mono)}
+input[type=text]{width:100%;background:#0e1115;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:9px;font:inherit}
+.tabs{display:flex;gap:6px;margin-bottom:10px}
+.tabs button.active{border-color:var(--amber);color:var(--amber)}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:10}
+.modal.open{display:flex}
+.modal .box{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;width:min(560px,92vw);display:flex;flex-direction:column;gap:10px}
+label{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.1em}
+.empty{color:var(--muted);padding:30px;text-align:center;font-family:var(--mono);font-size:12px}
+.filters{display:flex;gap:6px;margin-left:auto}
+.filters button{padding:4px 9px;font-size:12px}
+.filters button.active{border-color:var(--amber);color:var(--amber)}
+pre.log{font:11px/1.4 var(--mono);color:var(--muted);background:#0e1115;border:1px solid var(--line);border-radius:8px;padding:10px;max-height:220px;overflow:auto;white-space:pre-wrap}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">AI NATIVE REELS<b>ENLISTRA REELS · operator</b></div>
+  <div class="pills" id="pills"></div>
+  <button id="runBtn" class="primary" onclick="runNow()">Run now</button>
+  <button id="killBtn" class="danger" onclick="togglePause()">Kill switch</button>
+</header>
+<main>
+  <div>
+    <div class="flow" id="flow"></div>
+    <section>
+      <h2>Queue <span class="n" id="qn"></span>
+        <div class="filters" id="filters">
+          <button data-f="pending" class="active">To approve</button><button data-f="flagged">Flagged</button>
+          <button data-f="posted">Posted</button><button data-f="rejected">Rejected</button><button data-f="all">All</button>
+        </div></h2>
+      <div class="grid" id="grid"></div>
+    </section>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:16px">
+    <section>
+      <h2>Agent activity <span class="n" id="live">● live</span></h2>
+      <div class="feed" id="feed"></div>
+    </section>
+    <section>
+      <h2>Controls</h2>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div class="meta" id="schedTxt"></div>
+        <div style="display:flex;gap:8px;align-items:center"><input type="text" id="runId" placeholder="Internet Archive id (optional)"><button onclick="runNow(document.getElementById('runId').value)">Run id</button></div>
+        <details><summary class="meta" style="cursor:pointer">pipeline log</summary><pre class="log" id="log"></pre></details>
+      </div>
+    </section>
+    <section>
+      <h2>Brand brain</h2>
+      <div class="tabs" id="brainTabs"></div>
+      <textarea id="brainText"></textarea>
+      <div style="display:flex;gap:8px;margin-top:8px"><button class="ok" onclick="saveBrain()">Save</button><span class="meta" id="brainMsg">used by the selector and the critic on the next run</span></div>
+    </section>
+  </div>
+</main>
+
+<div class="modal" id="modal"><div class="box">
+  <h2>Edit and re-render <span class="n" id="mName"></span></h2>
+  <label>ON-SCREEN TITLE</label><input type="text" id="mHook">
+  <label>NARRATION (22 words max)</label><textarea id="mNarr" style="min-height:90px"></textarea>
+  <div class="meta">The cut (segments, payoff, sound cues) stays the same; the voice and card are rebuilt and the critic reviews it again.</div>
+  <div style="display:flex;gap:8px;justify-content:flex-end"><button onclick="closeModal()">Cancel</button><button class="primary" onclick="submitRerender()">Re-render</button></div>
+</div></div>
+
+<script>
+let S=null, filter='pending', brainKey=null, brainDirty=false, editing=null;
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function cls(v){return v>=4?'good':v>=3?'mid':'low'}
+
+async function load(){
+  try{ S=await (await fetch('/api/state')).json(); render(); $('#live').textContent='● live'; }
+  catch(e){ $('#live').textContent='○ offline'; }
+}
+function render(){
+  const c=S.counts||{};
+  $('#pills').innerHTML=
+    `<span class="pill ${S.paused?'bad':'on'}">${S.paused?'KILL SWITCH ON':'RUNNING'}</span>`+
+    `<span class="pill ${S.schedule.length?'on':''}">schedule ${S.schedule.length?S.schedule.join(' and '):'off'}</span>`+
+    `<span class="pill">${S.store==='supabase'?'cloud store':'local files'}</span>`+
+    `<span class="pill ${S.require_approval?'warn':'on'}">${S.require_approval?'approval required':'auto-post'}</span>`+
+    `<span class="pill ${S.privacy==='SELF_ONLY'?'warn':'on'}">tiktok ${S.privacy==='SELF_ONLY'?'private (pending review)':'public'}</span>`+
+    `<span class="pill">critic ${S.config.target}/${S.config.accept}</span>`;
+  const running=!!S.running;
+  $('#runBtn').disabled=running; $('#runBtn').textContent=running?'Running…':'Run now';
+  $('#killBtn').textContent=S.paused?'Resume':'Kill switch';
+  $('#schedTxt').textContent=S.schedule.length?`runs at ${S.schedule.join(' and ')} ${S.tz}; the kill switch pauses it`:'no schedule set (SCHEDULE env)';
+  const steps=[['SOURCE','Internet Archive, PD only'],['ANALYZE','motion, cuts'],['SELECT','Claude vision'],['RENDER','voice, music, sfx'],['CRITIC','gates + judge'],['QUEUE',(c.pending||0)+' waiting'],['POST',(c.posted||0)+' posted']];
+  $('#flow').innerHTML=steps.map((s,i)=>`<div class="step ${running&&i<5?'live':''}"><div class="k">${String(i+1).padStart(2,'0')} ${s[0]}</div><div class="v">${esc(s[1])}</div></div>`).join('');
+  const reels=S.reels.filter(r=>filter==='all'||r.stage===filter);
+  $('#qn').textContent=`${reels.length}`;
+  $('#grid').innerHTML=reels.length?reels.map(card).join(''):`<div class="empty">nothing here${filter==='pending'?' · press Run now to make a reel':''}</div>`;
+  $('#feed').innerHTML=S.activity.map(e=>`<div class="ev"><span class="t">${esc(e.t.slice(11,16))}</span><span class="k ${esc(e.kind)}">${esc(e.kind)}</span><span>${esc(e.text)}</span></div>`).join('')||'<div class="empty">no activity yet</div>';
+  $('#log').textContent=(S.log||[]).join('\n');
+  const keys=Object.keys(S.brain);
+  if(!brainKey&&keys.length) brainKey=keys[0];
+  $('#brainTabs').innerHTML=keys.map(k=>`<button class="${k===brainKey?'active':''}" onclick="pickBrain('${k}')">${k}.md</button>`).join('');
+  if(!brainDirty&&brainKey) $('#brainText').value=S.brain[brainKey]||'';
+}
+function card(r){
+  const sc=r.scores?Object.entries(r.scores).map(([k,v])=>`<div class="sc ${cls(v)}"><b>${v}</b>${k.slice(0,7)}</div>`).join(''):'';
+  const job=r.job&&r.job.status==='running'?`<div class="meta" style="color:var(--amber)">working…</div>`:r.job&&r.job.status==='error'?`<div class="meta" style="color:var(--red)">${esc(r.job.text)}</div>`:'';
+  const fix=r.fix?`<div class="fix"><b>critic:</b> ${esc(r.fix)}</div>`:'';
+  const st=Object.entries(r.status||{}).filter(([k])=>k!=='typefully').map(([k,v])=>`${k}: ${esc(String(v).slice(0,60))}`).join(' · ');
+  const a=[];
+  if(r.stage==='pending'||r.stage==='flagged'){a.push(`<button class="ok" onclick="act('approve','${r.name}')">Approve and post</button>`);a.push(`<button onclick="openEdit('${r.name}')">Edit</button>`);a.push(`<button class="danger" onclick="rejectReel('${r.name}')">Reject</button>`)}
+  if(r.stage==='rejected'){a.push(`<button onclick="act('restore','${r.name}')">Back to queue</button>`);a.push(`<button onclick="openEdit('${r.name}')">Edit</button>`)}
+  if(r.stage==='posted'){a.push(`<button onclick="openEdit('${r.name}')">Edit and redo</button>`)}
+  if(r.stage==='approved'||r.stage==='posting'){a.push(`<button onclick="act('restore','${r.name}')">Back to queue</button>`)}
+  return `<div class="card"><video src="${r.video}" poster="${r.cover}" controls preload="none" muted></video><div class="body">
+    <div style="display:flex;justify-content:space-between;align-items:center"><span class="tag ${r.stage}">${r.stage}</span><span class="meta">${esc((r.created||'').slice(0,16).replace('T',' '))}</span></div>
+    <div class="hook">${esc(r.hook)}</div>
+    <div class="meta">${esc(r.source&&r.source.title)}${r.source&&r.source.year?' · '+r.source.year:''} · ${r.name}</div>${r.owner_note?`<div class="meta">note: ${esc(r.owner_note)}</div>`:''}
+    <div class="narr">${esc(r.narration)}</div>
+    <div class="scores">${sc}</div>${(r.gates||[]).length?`<div class="fix"><b>gates:</b> ${esc(r.gates.join('; '))}</div>`:''}${fix}${st?`<div class="meta">${st}</div>`:''}${job}
+    <div class="actions">${a.join('')}</div></div></div>`;
+}
+async function post(url,body){const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})});const j=await r.json().catch(()=>({}));if(!r.ok)alert(j.error||'failed');return j}
+async function act(kind,name){await post(`/api/${kind}/${name}`);load()}
+async function rejectReel(name){const note=prompt('Why? (goes into the activity feed; optional)')||'';await post(`/api/reject/${name}`,{note});load()}
+async function runNow(id){await post('/api/run',{films:1,id:id||null});load()}
+async function togglePause(){await post('/api/pause',{on:!S.paused});load()}
+function pickBrain(k){brainKey=k;brainDirty=false;render()}
+$('#brainText').addEventListener('input',()=>brainDirty=true);
+async function saveBrain(){await post(`/api/brain/${brainKey}`,{text:$('#brainText').value});brainDirty=false;$('#brainMsg').textContent='saved';setTimeout(()=>$('#brainMsg').textContent='used by the selector and the critic on the next run',2000);load()}
+function openEdit(name){editing=name;const r=S.reels.find(x=>x.name===name);$('#mName').textContent=name;$('#mHook').value=r.hook||'';$('#mNarr').value=r.narration||'';$('#modal').classList.add('open')}
+function closeModal(){$('#modal').classList.remove('open')}
+async function submitRerender(){await post(`/api/rerender/${editing}`,{hook:$('#mHook').value,narration:$('#mNarr').value});closeModal();load()}
+document.querySelectorAll('#filters button').forEach(b=>b.onclick=()=>{filter=b.dataset.f;document.querySelectorAll('#filters button').forEach(x=>x.classList.toggle('active',x===b));render()});
+load(); setInterval(load,4000);
+</script>
+</body>
+</html>

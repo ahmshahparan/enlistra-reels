@@ -1,0 +1,12 @@
+work/
+assets/raw/
+assets/voices/
+out_fallback/
+_old/
+.venv/
+__pycache__/
+*.pyc
+secrets.env
+*.tgz
+*.command
+.DS_Store

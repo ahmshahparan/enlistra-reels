@@ -1,0 +1,69 @@
+niche: classic_comedy
+brand: "Enlistra Reels"          # shown on the title card and caption sign-off
+
+source:
+  provider: internet_archive
+  # Public domain rules: US works published before 1929, or items carrying a
+  # Creative Commons / public domain license URL. Anything else is skipped.
+  pd_year_cutoff: 1929
+  queries:
+    - 'creator:(chaplin) AND mediatype:movies'
+    - 'creator:(keaton) AND mediatype:movies'
+    - 'subject:(laurel AND hardy) AND mediatype:movies'
+    - 'subject:(silent comedy) AND mediatype:movies'
+  max_download_mb: 400
+  require_identified: true   # skip uploads with no year that the model cannot identify (compilations)
+  prefer_formats: [mp4, ogv, mkv]
+
+select:
+  clip_seconds_min: 28   # candidate window size; the vision step cuts 14 to 24 s inside it
+  clip_seconds_max: 40
+  candidates_per_film: 10
+  max_rounds: 3          # regenerate rounds when the critic rejects a pick
+  reels_per_film: 2
+  # weights for the heuristic score (0..1 each, summed)
+  w_motion: 0.5
+  w_cuts: 0.3
+  w_dialogue: 0.2      # only matters when a transcript exists
+  use_vision: true     # Claude looks at frames (needs ANTHROPIC_API_KEY); else text ranker
+  use_llm_rank: true   # LLM picks from candidates and writes hooks; falls back to heuristic on error
+  llm_backend: ollama  # ollama (local, free) or anthropic (needs ANTHROPIC_API_KEY)
+  ollama_model: llama3.1:8b
+  ollama_url: http://localhost:11434
+  anthropic_model: claude-sonnet-5-5
+
+edit:
+  width: 1080
+  height: 1920
+  fps: 30
+  font: /usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf
+  title_card_seconds: 1.2
+  crop_mode: blur_bg    # blur_bg = keep full frame over blurred fill; center = hard 9:16 crop
+  speed: 1.08               # gentle speed-up; silent comedy reads well a touch fast
+  music_dir: assets/music   # public domain rags, fetched by enlistra/assets.py
+  music_volume: 0.8
+  sfx_dir: assets/sfx       # CC0 hits, fetched by enlistra/assets.py
+  sfx_volume: 1.0
+  voice: assets/voices/en_US-ryan-high.onnx   # Piper voice; see assets/voices
+  voice_speed: 0.97
+  narration_start: 0.4
+  watermark: "@enlistrareels"
+
+critic:
+  use_judge: true      # Claude scores the finished reel; gates run regardless
+  target_score: 3.5   # regenerate below this while rounds remain
+  accept_score: 3.0   # after the last round, keep reels at or above this
+  min_len: 13
+  max_len: 25
+  voice_gap: 1.5       # seconds the narration must end before the payoff
+
+post:
+  mode: publish           # draft = write manifest + Typefully draft, never auto-publish; publish = schedule
+  typefully_enabled: true
+  require_approval: true  # reels wait in the dashboard queue until the owner approves
+  platforms: [instagram, tiktok, youtube_shorts]
+  hashtags: ["#classiccomedy", "#silentfilm", "#chaplin", "#reels", "#filmhistory", "#publicdomain"]
+
+paths:
+  work: work
+  state: work/state.jsonl

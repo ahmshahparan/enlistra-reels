@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Runs Enlistra Reels at 9:00 and 17:00 while the Mac is awake.
+     Install:  cp com.enlistra.reels.plist ~/Library/LaunchAgents/ && launchctl load ~/Library/LaunchAgents/com.enlistra.reels.plist
+     Remove:   launchctl unload ~/Library/LaunchAgents/com.enlistra.reels.plist -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.enlistra.reels</string>
+  <key>WorkingDirectory</key><string>/Users/ahmshahparan/PycharmProjects/enlistra-reels</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string><string>-lc</string>
+    <string>. .venv/bin/activate && python cli.py run --films 1 >> work/run.log 2>&1</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict><key>Hour</key><integer>9</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Hour</key><integer>17</integer><key>Minute</key><integer>0</integer></dict>
+  </array>
+  <key>StandardOutPath</key><string>/Users/ahmshahparan/PycharmProjects/enlistra-reels/work/run.log</string>
+  <key>StandardErrorPath</key><string>/Users/ahmshahparan/PycharmProjects/enlistra-reels/work/run.log</string>
+</dict>
+</plist>

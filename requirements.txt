@@ -1,0 +1,9 @@
+requests>=2.31
+anthropic>=0.40
+pyyaml>=6
+numpy>=1.26
+pillow>=10
+piper-tts>=1.2
+# optional, for dialogue-based sources:
+# faster-whisper>=1.0
+flask>=3
