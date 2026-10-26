@@ -126,8 +126,8 @@ pre.log{font:11.5px/1.45 ui-monospace,Menlo,monospace;color:var(--muted);white-s
 .sheet .box{position:relative}
 .sheet .x{position:sticky;top:0;justify-self:end;grid-column:1/-1;z-index:3;margin:-4px -4px -50px 0;background:rgba(255,255,255,.92)}
 .sheet .box{padding-bottom:0;grid-auto-rows:max-content;align-content:start}
-.sheet .acts.bar{grid-column:1/-1;position:sticky;bottom:0;margin:0 -18px;padding:12px 18px calc(14px + env(safe-area-inset-bottom));background:rgba(255,250,244,.96);border-top:1px solid rgba(31,26,23,.08);z-index:2}
-.sheet .acts.bar button,.sheet .acts.bar .btn{flex:1 1 auto;justify-content:center}
+.sheet .acts.actbar{grid-column:1/-1;position:sticky;bottom:0;margin:0 -18px;padding:12px 18px calc(14px + env(safe-area-inset-bottom));background:rgba(255,250,244,.96);border-top:1px solid rgba(31,26,23,.08);z-index:2}
+.sheet .acts.actbar button,.sheet .acts.actbar .btn{flex:1 1 auto;justify-content:center}
 button[disabled]{opacity:.55;pointer-events:none}
 .toast{position:fixed;left:50%;top:calc(14px + env(safe-area-inset-top));transform:translateX(-50%);background:#1f1a17;color:#fff;padding:10px 16px;border-radius:999px;font-size:13px;font-weight:600;z-index:80;box-shadow:0 6px 24px rgba(0,0,0,.25);opacity:0;transition:opacity .2s;pointer-events:none;max-width:calc(100% - 32px);text-align:center}
 .toast.on{opacity:1}
@@ -381,7 +381,7 @@ function renderSheet(){
     ${(r.gates||[]).length?`<div class="note" style="color:var(--bad)"><b>Gates:</b> ${esc(r.gates.join('; '))}</div>`:''}
     ${r.owner_note?`<div class="note"><b>Your note:</b> ${esc(r.owner_note)}</div>`:''}
     <div id="editBox"></div>${st}
-    </div><div class="acts bar">${a.join('')}</div>`;
+    </div><div class="acts actbar">${a.join('')}</div>`;
 }
 function openSheet(n){open=n;renderSheet();$('#sheet').classList.add('open');document.body.style.overflow='hidden'}
 function closeSheet(){open=null;$('#sheet').classList.remove('open');$('#sheetBox').innerHTML='';document.body.style.overflow=''}
