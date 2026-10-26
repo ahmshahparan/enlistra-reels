@@ -38,15 +38,21 @@ def _month() -> str:
     return time.strftime("%Y-%m")
 
 
-def spent(st) -> float:
-    d = st.setting("gen_spend") or {}
+def _ledger():
+    """One spend ledger for every generated channel, so the monthly cap is shared."""
+    return store.get(account="silent-comedy")
+
+
+def spent(st=None) -> float:
+    d = _ledger().setting("gen_spend") or {}
     return float(d.get(_month(), 0.0))
 
 
 def _charge(st, usd: float):
-    d = st.setting("gen_spend") or {}
+    led = _ledger()
+    d = led.setting("gen_spend") or {}
     d[_month()] = round(float(d.get(_month(), 0.0)) + usd, 4)
-    st.set_setting("gen_spend", d)
+    led.set_setting("gen_spend", d)
 
 
 def _check_budget(st, cfg: dict, cost: float):
@@ -133,7 +139,7 @@ def build_bible(cfg: dict) -> dict:
         raise RuntimeError("no bible.md in the brand brain")
     refs: dict = {}
     first = None
-    for view, framing in SHEET_VIEWS.items():
+    for view, framing in (cfg.get("sheet_views") or SHEET_VIEWS).items():
         prompt = f"{framing}\n\nCharacter description (follow exactly):\n{bible[:3500]}"
         img = make_image(prompt, [first] if first else [], cfg)
         first = first or img
@@ -182,8 +188,9 @@ def write_episode(cfg: dict) -> dict:
     import anthropic
     st = store.get()
     prev = [r.get("title") or r.get("hook") for r in st.reels()[:40]]
+    system = Path(cfg["episode_prompt_file"]).read_text() if cfg.get("episode_prompt_file") else EPISODE_SYSTEM
     msg = anthropic.Anthropic().messages.create(
-        model=cfg.get("anthropic_model", "claude-sonnet-5-5"), max_tokens=8000, system=EPISODE_SYSTEM,
+        model=cfg.get("anthropic_model", "claude-sonnet-5-5"), max_tokens=8000, system=system,
         messages=[{"role": "user", "content": f"BIBLE:\n{st.brain('bible')}\n\nVOICE:\n{st.brain('voice')}\n\n"
                                               f"PREVIOUS:\n" + "\n".join(f"- {p}" for p in prev if p)}])
     text = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")

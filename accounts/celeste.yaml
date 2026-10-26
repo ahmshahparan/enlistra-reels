@@ -1,0 +1,25 @@
+# Celeste Arden: AI luxury-lifestyle persona, generated from an approved character bible.
+name: Celeste Arden
+schedule: off            # generation starts after the character bible and sheet are approved
+pipeline: character
+character:
+  monthly_budget_usd: 250          # shared cap with Bolt (one Gemini key)
+  video_model: veo-3.1-fast-generate-preview
+  image_model: gemini-2.5-flash-image
+  video_usd_per_second: 0.15
+  image_usd: 0.04
+  episode_prompt_file: prompts/persona-episode.md
+  sheet_views:
+    portrait: "Character sheet, head and shoulders portrait, soft window light, plain warm grey background."
+    full: "Character sheet, full body standing, wearing a cream linen set, plain warm grey background."
+    scene: "The character on a sunlit hotel balcony overlooking the sea, holding an espresso cup, candid phone-POV photo."
+edit:
+  watermark: "@celeste.arden.ai"
+  music_volume: 0.5
+  sfx: false
+post:
+  hashtags: ["#luxurylifestyle", "#travel", "#aiinfluencer", "#softlife", "#shorts"]
+  yt_tags: ["luxury lifestyle", "luxury travel", "soft life", "ai influencer", "day in the life", "luxury hotel",
+            "travel vlog", "aesthetic", "slow living"]
+  yt_category: "19"       # Travel & Events
+  playlist: "Celeste's Soft Life"
