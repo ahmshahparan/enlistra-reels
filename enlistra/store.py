@@ -305,6 +305,7 @@ class SupabaseStore(FileStore):
                  "narration": r["narration"], "gag": r["gag"], "source": r["source"], "status": r.get("status") or {},
                  "critic": r.get("critic") or {}, "platforms": list((r.get("status") or {}).keys()),
                  "ai_generated": (r.get("style") == "character"),
+                 "longform": (r.get("style") == "feature"),
                  "created": r.get("created_at")}
             man.write_text(json.dumps(m, indent=2))
         return mp4, man

@@ -205,7 +205,7 @@ def render(identifier: str, cfg: dict, limit_s: float | None = None) -> Path:
                      f"{c['name']}" for c in p.get("chapters", []))
     credit = f"Source: {info['title']}" + (f" ({info['year']})" if info.get("year") else "") + \
         ". Public domain film, restored and re-scored by Enlistra Reels. Music: public domain recordings."
-    tags = " ".join(cfg["post"].get("hashtags", []))
+    tags = " ".join(t for t in cfg["post"].get("hashtags", []) if t.lower() != "#shorts")
     m["caption"] = f"{p['description']}\n\n0:00 Introduction\n{chap}\n\n{credit}\n\n{tags}"
     m["critic"] = {"verdict": "pass", "feedback": ""}
     m["approval"] = "pending"

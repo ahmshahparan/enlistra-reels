@@ -50,7 +50,7 @@ edit:
   voice_speed: 0.97
   narration_start: 0.3
   style: cold
-  styles: [cold, cold, cold_narrated]   # rotated per reel; 2 of 3 music-only, 1 narrated (A/B test)
+  styles: [cold_narrated]   # every Short is narrated: the original commentary YouTube looks for
   watermark: "@enlistra_reels"
 
 critic:
@@ -64,7 +64,9 @@ critic:
 post:
   mode: publish           # draft = write manifest + Typefully draft, never auto-publish; publish = schedule
   typefully_enabled: true
-  require_approval: true  # reels wait in the dashboard queue until the owner approves
+  require_approval: true  # reels wait in the dashboard queue until the owner approves...
+  auto_approve_score: 4   # ...unless the critic scores them 4/5 or higher with no failed gates (owner decision, Oct 26 2026)
+  daily_post_cap: 3       # uploads per channel per day (YouTube API quota: ~6 uploads/day across all channels)
   platforms: [youtube_shorts]   # TikTok and Instagram are posted from the phone queue in the dashboard
   hashtags: ["#charliechaplin", "#silentfilm", "#comedy", "#chaplin", "#funny", "#shorts"]
   yt_tags: ["charlie chaplin", "chaplin", "charlie chaplin comedy", "silent film", "silent comedy", "classic comedy",

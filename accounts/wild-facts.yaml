@@ -25,6 +25,7 @@ critic:
   min_len: 10
   max_len: 30
 post:
+  daily_post_cap: 2
   hashtags: ["#animalfacts", "#wildlife", "#nature", "#animals", "#shorts"]
   yt_tags: ["animal facts", "wildlife", "nature", "animals", "birds", "nature documentary", "wildlife shorts",
             "fun facts", "biology", "science facts"]

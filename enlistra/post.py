@@ -161,10 +161,11 @@ def youtube_short(manifest: dict) -> str | None:
         raise RuntimeError(f"YouTube upload {up.status_code}: {up.text[:300]}")
     vid = up.json().get("id")
     log.info("YouTube video %s (%s)", vid, body["status"]["privacyStatus"])
-    if manifest.get("playlist") and vid:
+    plist = "Full Restored Films" if manifest.get("longform") else manifest.get("playlist")
+    if plist and vid:
         from .seo import add_to_playlist
-        add_to_playlist(store.current_account(), manifest["playlist"], vid)
-    return f"https://youtube.com/shorts/{vid}"
+        add_to_playlist(store.current_account(), plist, vid)
+    return f"https://www.youtube.com/watch?v={vid}" if manifest.get("longform") else f"https://youtube.com/shorts/{vid}"
 
 
 # ---------------------------------------------------------------- TikTok

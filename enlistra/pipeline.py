@@ -73,6 +73,17 @@ def _overlaps(c, kept) -> bool:
     return any(not (c.end <= k.start or c.start >= k.end) for k in kept)
 
 
+def _posted_today(st) -> int:
+    """Reels this channel uploaded since local midnight (keeps us inside the YouTube API quota)."""
+    import time as _t
+    today = _t.strftime("%Y-%m-%d")
+    n = 0
+    for r in st.reels():
+        if r.get("stage") == "posted" and str(r.get("updated_at") or "")[:10] == today:
+            n += 1
+    return n
+
+
 class _Span:
     def __init__(self, start, end):
         self.start, self.end = float(start), float(end)
@@ -206,10 +217,19 @@ def process_film(film, cfg: dict, work: Path, post_now: bool) -> list[Path]:
         m["critic"] = {"verdict": status, "scores": (card.get("judge") or {}).get("scores"),
                        "feedback": card.get("feedback")}
         st = store.get(cfg["paths"]["work"])
-        if status == "pass" and cfg["post"].get("require_approval", True):
+        score = float((card.get("judge") or {}).get("scores", {}).get("overall") or 0)
+        auto = cfg["post"].get("auto_approve_score")
+        if (status == "pass" and cfg["post"].get("require_approval", True) and auto and score >= float(auto)
+                and not card.get("gates") and post_now and _posted_today(st) < int(cfg["post"].get("daily_post_cap", 3))):
+            st.save_reel(out.stem, m, card)
+            activity(cfg, "owner", f"{out.name} auto-approved: critic scored it {score:g}/5", reel=out.stem)
+            res = post.publish(mpath, cfg["post"])
+            activity(cfg, "post", f"{out.name} posted: {res}", reel=out.stem)
+        elif status == "pass" and cfg["post"].get("require_approval", True):
             m["approval"] = "pending"
             st.save_reel(out.stem, m, card)
-            activity(cfg, "queue", f"{out.name} is ready for your approval: '{clip.hook}'", reel=out.stem)
+            activity(cfg, "queue", f"{out.name} is ready for your approval: '{clip.hook}'" +
+                     (f" (scored {score:g}/5)" if score else ""), reel=out.stem)
         elif post_now and status == "pass":
             st.save_reel(out.stem, m, card)
             res = post.publish(mpath, cfg["post"])
