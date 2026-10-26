@@ -222,7 +222,8 @@ class SupabaseStore(FileStore):
         if path.stat().st_size > self.BIG:
             dest = self._vault() / obj.replace("/", "__")
             if path.resolve() != dest.resolve():
-                shutil.copyfile(path, dest)
+                shutil.move(str(path), dest)      # one copy only; leave a link where the pipeline expects it
+                path.symlink_to(dest)
             return
         with open(path, "rb") as fh:
             r = requests.post(f"{self.url}/storage/v1/object/{self.BUCKET}/{obj}", headers={

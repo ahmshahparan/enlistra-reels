@@ -81,6 +81,16 @@ def clean(keep_src: set[str] | None = None) -> dict:
         if stages.get(stem) in DONE and now - f.stat().st_mtime > 1800:
             add("out", _rm(f))
     vault = WORK / "media"
+    # one copy of big files: if out/ holds a full copy of something in the vault, replace it with a link
+    for f in (WORK / "out").glob("*.mp4"):
+        if f.is_symlink() or not vault.exists():
+            continue
+        twin = next(iter(vault.glob(f"*__{f.name}")), None)
+        if twin and twin.stat().st_size == f.stat().st_size:
+            n = f.stat().st_size
+            f.unlink()
+            f.symlink_to(twin.resolve())
+            add("duplicates", n)
     for f in vault.glob("*") if vault.exists() else []:
         stem = f.name.split("__")[-1].split(".")[0]
         if stages.get(stem) in DONE:
