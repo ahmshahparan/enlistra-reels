@@ -89,10 +89,10 @@ button:disabled{opacity:.5}
 .reel{padding:10px;cursor:pointer;display:flex;flex-direction:column;gap:9px;transition:transform .2s}
 .reel:hover{transform:translateY(-3px)}
 .thumb{position:relative;aspect-ratio:4/5;border-radius:18px;overflow:hidden;background:#2a2420}
-.thumb img{width:100%;height:100%;object-fit:cover;object-position:center 58%;display:block}
-.tag{position:absolute;top:8px;left:8px;font-size:11px;font-weight:700;padding:4px 9px;border-radius:999px;background:rgba(255,255,255,.85);color:var(--ink);text-transform:capitalize}
+.thumb img{width:100%;height:100%;object-fit:cover;object-position:center 30%;display:block}
+.tag{position:absolute;bottom:8px;left:8px;font-size:11px;font-weight:700;padding:4px 9px;border-radius:999px;background:rgba(255,255,255,.85);color:var(--ink);text-transform:capitalize}
 .tag.pending{background:var(--accent);color:#fff}.tag.flagged{background:#fff;color:var(--bad)}.tag.posted{background:#fff;color:var(--good)}
-.ring{position:absolute;top:6px;right:6px}
+.ring{position:absolute;bottom:6px;right:6px}
 .reel .tt{font-weight:600;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:2.5em}
 .reel .mm{font-size:12px;color:var(--muted);display:flex;justify-content:space-between;gap:6px}
 .reel button{justify-content:center;width:100%;padding:8px 10px}
@@ -108,8 +108,8 @@ input.f{font-family:var(--sans);font-size:14px}
 textarea{min-height:240px}
 pre.log{font:11.5px/1.45 ui-monospace,Menlo,monospace;color:var(--muted);white-space:pre-wrap;max-height:340px;overflow:auto;margin:0}
 /* bottom tab bar */
-.tabbar{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom));transform:translateX(-50%);display:flex;align-items:center;gap:4px;padding:6px;z-index:30}
-.tabbar a{padding:10px 16px;border-radius:999px;color:var(--muted);text-decoration:none;font-weight:600;display:flex;align-items:center;gap:6px;cursor:pointer}
+.tabbar{background:rgba(255,250,244,.92)!important;position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom));transform:translateX(-50%);display:flex;align-items:center;gap:4px;padding:6px;z-index:30}
+.tabbar a{padding:10px 16px;border-radius:999px;color:#5b4f46;text-decoration:none;font-weight:600;display:flex;align-items:center;gap:6px;cursor:pointer}
 .tabbar a.on{background:rgba(255,255,255,.85);color:var(--ink);box-shadow:0 2px 8px rgba(70,45,20,.1)}
 .tabbar .fab{width:42px;height:42px;padding:0;justify-content:center;border-radius:50%;background:#1f1a17;color:#fff;margin-left:4px}
 /* sheet */
@@ -123,6 +123,13 @@ pre.log{font:11.5px/1.45 ui-monospace,Menlo,monospace;color:var(--muted);white-s
 .sc.good b{color:var(--good)}.sc.mid b{color:var(--warn)}.sc.low b{color:var(--bad)}
 .note{background:rgba(255,255,255,.6);border-radius:14px;padding:10px 12px;font-size:13px;margin:8px 0}
 .acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.sheet .box{position:relative}
+.sheet .x{position:sticky;top:0;float:right;z-index:3;margin:-4px -4px 0 0}
+.sheet .acts.bar{position:sticky;bottom:-18px;margin:12px -18px -18px;padding:12px 18px calc(14px + env(safe-area-inset-bottom));background:rgba(255,250,244,.96);border-top:1px solid rgba(31,26,23,.08);z-index:2}
+.sheet .acts.bar button,.sheet .acts.bar .btn{flex:1 1 auto;justify-content:center}
+button[disabled]{opacity:.55;pointer-events:none}
+.toast{position:fixed;left:50%;top:calc(14px + env(safe-area-inset-top));transform:translateX(-50%);background:#1f1a17;color:#fff;padding:10px 16px;border-radius:999px;font-size:13px;font-weight:600;z-index:80;box-shadow:0 6px 24px rgba(0,0,0,.25);opacity:0;transition:opacity .2s;pointer-events:none;max-width:calc(100% - 32px);text-align:center}
+.toast.on{opacity:1}
 .view{display:none}.view.on{display:block}
 .empty{padding:26px;text-align:center;color:var(--muted)}
 @media (max-width:900px){
@@ -149,7 +156,8 @@ pre.log{font:11.5px/1.45 ui-monospace,Menlo,monospace;color:var(--muted);white-s
   .tabbar a span{display:none}
   .sheet{padding:0;align-items:flex-end}
   .sheet .box{grid-template-columns:1fr;border-radius:26px 26px 0 0;max-height:94vh}
-  .sheet video{max-height:56vh}
+  .sheet video{max-height:46vh}
+  .sheet .box{padding-top:14px}
 }
 </style>
 </head>
@@ -252,6 +260,8 @@ let ACC=new URLSearchParams(location.search).get('a')||'silent-comedy';
 const q=p=>p+(p.includes('?')?'&':'?')+'a='+encodeURIComponent(ACC);
 let S=null, filter='pending', brainKey=null, brainDirty=false, view='overview', open=null, search='';
 const $=s=>document.querySelector(s);
+const H=sel=>({set innerHTML(v){setHTML(sel,v)}});
+function setHTML(sel,html){const el=typeof sel==='string'?$(sel):sel;if(el&&el._h!==html){el.innerHTML=html;el._h=html}}
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fmt=n=>{n=Number(n||0);return n>=1e6?(n/1e6).toFixed(1)+'M':n>=1e4?Math.round(n/1e3)+'K':n.toLocaleString()};
 const COLORS=['#f26b1d','#3b82f6','#16a34a','#9333ea','#0ea5e9','#e11d48'];
@@ -288,10 +298,10 @@ function render(){
   if(!S) return;
   const accts=S.accounts||[]; const me=accts.find(a=>a.id===ACC)||{name:ACC};
   // channels: rail (desktop) and chips (phone)
-  $('#rail').innerHTML=accts.map((a,i)=>`<div class="ch ${a.id===ACC?'on':''}" title="${esc(a.name)}" style="background:${COLORS[i%COLORS.length]}" onclick="switchAcct('${a.id}')">${esc((a.name||a.id).replace(/^Enlistra\s*/,'').slice(0,1).toUpperCase())}</div>`).join('');
-  $('#chips').innerHTML=accts.map(a=>`<span class="chip ${a.id===ACC?'on':''}" onclick="switchAcct('${a.id}')">${esc((a.name||a.id).replace(/^Enlistra\s*/,'')||a.name)}</span>`).join('');
+  H('#rail').innerHTML=accts.map((a,i)=>`<div class="ch ${a.id===ACC?'on':''}" title="${esc(a.name)}" style="background:${COLORS[i%COLORS.length]}" onclick="switchAcct('${a.id}')">${esc((a.name||a.id).replace(/^Enlistra\s*/,'').slice(0,1).toUpperCase())}</div>`).join('');
+  H('#chips').innerHTML=accts.map(a=>`<span class="chip ${a.id===ACC?'on':''}" onclick="switchAcct('${a.id}')">${esc((a.name||a.id).replace(/^Enlistra\s*/,'')||a.name)}</span>`).join('');
   // background: latest cover
-  const latest=S.reels.find(r=>r.cover); if(latest){const u=`url("${q(latest.cover)}")`; if($('#bgimg').style.backgroundImage!==u) $('#bgimg').style.backgroundImage=u}
+  const latest=S.reels.find(r=>r.cover); if(latest){const u=`url("${q(latest.cover)}")`; const bg=$('#bgimg'); if(bg.dataset.u!==u){bg.dataset.u=u;bg.style.backgroundImage=u}}
   const c=S.counts||{}; const pending=(c.pending||0), flagged=(c.flagged||0), posted=(c.posted||0);
   $('#chName').textContent=me.name||ACC;
   $('#chSub').textContent=(S.schedule&&S.schedule.length?`Runs at ${S.schedule.join(', ')}`:'No schedule yet')+` · ${pending} waiting · ${posted} posted`;
@@ -306,12 +316,12 @@ function render(){
   $('#queueTxt').textContent=`${posted} of ${S.reels.length} reels posted`;
   const mx=Math.max(1,...perf.map(r=>Number(r.perf.views||0)));
   const best=perf.reduce((b,r)=>Number(r.perf.views)>(b?Number(b.perf.views):-1)?r:b,null);
-  $('#bars').innerHTML=perf.length?perf.map(r=>`<div class="b" title="${esc(r.title||r.hook)}: ${r.perf.views} views"><div class="col ${r===best?'top':''}" style="height:${Math.max(6,Math.round(100*Number(r.perf.views||0)/mx))}px"></div><small>${fmt(r.perf.views)}</small></div>`).join('')
+  H('#bars').innerHTML=perf.length?perf.map(r=>`<div class="b" title="${esc(r.title||r.hook)}: ${r.perf.views} views"><div class="col ${r===best?'top':''}" style="height:${Math.max(6,Math.round(100*Number(r.perf.views||0)/mx))}px"></div><small>${fmt(r.perf.views)}</small></div>`).join('')
     :`<div class="muted" style="align-self:center;width:100%;text-align:center">No stats yet</div>`;
   // automation
   const y=S.youtube||{};
   $('#autoState').textContent=S.paused?'paused':'on'; $('#autoState').style.background=S.paused?'rgba(214,69,69,.12)':''; $('#autoState').style.color=S.paused?'var(--bad)':'';
-  $('#auto').innerHTML=[
+  H('#auto').innerHTML=[
     ['⏻','Agents running',S.paused?'Kill switch is on':'Scheduled runs will start',!S.paused,'togglePause()'],
     ['🕘','Schedule',S.schedule&&S.schedule.length?S.schedule.join(', ')+' '+(S.tz||''):'Off for this channel',!!(S.schedule&&S.schedule.length),null],
     ['✓','Approval required','Nothing posts until you approve',!!S.require_approval,null],
@@ -319,28 +329,28 @@ function render(){
   ].map(([i,t,s,on,fn])=>`<div class="row"><div class="ri">${i}</div><div class="t"><b>${t}</b><span>${esc(s)}</span></div><div class="tog ${on?'on':''} ${fn?'':'ro'}" ${fn?`onclick="${fn}"`:''}></div></div>`).join('');
   // waiting row
   const waiting=S.reels.filter(r=>r.stage==='pending').slice(0,5);
-  $('#waiting').innerHTML=waiting.map(reelCard).join('')+`<div class="reel glass add" onclick="runNow()"><div><div class="plus">+</div><b>New run</b><div class="muted" style="font-size:12px">find a film, cut reels</div></div></div>`;
+  H('#waiting').innerHTML=waiting.map(reelCard).join('')+`<div class="reel glass add" onclick="runNow()"><div><div class="plus">+</div><b>New run</b><div class="muted" style="font-size:12px">find a film, cut reels</div></div></div>`;
   // feeds
   const ev=e=>`<div class="ev"><span class="faint">${esc((e.t||'').slice(11,16))}</span><span><span class="k ${esc(e.kind)}">${esc(e.kind)}</span>${esc(e.text)}</span></div>`;
-  $('#miniFeed').innerHTML=(S.activity||[]).slice(0,5).map(ev).join('')||'<div class="empty">No activity yet</div>';
-  $('#feed').innerHTML=(S.activity||[]).map(ev).join('')||'<div class="empty">No activity yet</div>';
+  H('#miniFeed').innerHTML=(S.activity||[]).slice(0,5).map(ev).join('')||'<div class="empty">No activity yet</div>';
+  H('#feed').innerHTML=(S.activity||[]).map(ev).join('')||'<div class="empty">No activity yet</div>';
   $('#log').textContent=(S.log||[]).join('\n');
   // reels view
   const F=[['pending','To approve',pending],['flagged','Flagged',flagged],['posted','Posted',posted],['rejected','Rejected',c.rejected||0],['all','All',S.reels.length]];
-  $('#filters').innerHTML=F.map(([k,l,n])=>`<span class="chip ${filter===k?'on':''}" onclick="filter='${k}';render()">${l} · ${n}</span>`).join('');
+  H('#filters').innerHTML=F.map(([k,l,n])=>`<span class="chip ${filter===k?'on':''}" onclick="filter='${k}';render()">${l} · ${n}</span>`).join('');
   let list=S.reels.filter(r=>filter==='all'||r.stage===filter);
   if(search) list=S.reels.filter(r=>[r.title,r.hook,r.caption,r.narration,(r.source||{}).title,r.name].join(' ').toLowerCase().includes(search));
   $('#reelsSub').textContent=search?`${list.length} matching "${search}"`:`${list.length} ${filter==='all'?'reels':F.find(f=>f[0]===filter)[1].toLowerCase()}`;
-  $('#grid').innerHTML=list.length?list.map(reelCard).join(''):`<div class="empty glass" style="grid-column:1/-1">Nothing here${filter==='pending'?'. Tap + to make reels.':''}</div>`;
+  H('#grid').innerHTML=list.length?list.map(reelCard).join(''):`<div class="empty glass" style="grid-column:1/-1">Nothing here${filter==='pending'?'. Tap + to make reels.':''}</div>`;
   // brain view
   const keys=Object.keys(S.brain||{}); if(!brainKey&&keys.length) brainKey=keys[0];
-  $('#brainTabs').innerHTML=keys.map(k=>`<span class="chip ${k===brainKey?'on':''}" onclick="brainKey='${k}';brainDirty=false;render()">${k}.md</span>`).join('');
+  H('#brainTabs').innerHTML=keys.map(k=>`<span class="chip ${k===brainKey?'on':''}" onclick="brainKey='${k}';brainDirty=false;render()">${k}.md</span>`).join('');
   if(!brainDirty&&brainKey) $('#brainText').value=S.brain[brainKey]||'';
   const isChar=S.pipeline==='character'; $('#bibleCard').style.display=isChar?'':'none';
   if(isChar){const b=S.bible||{},v=b.views||{};
-    $('#bibleBody').innerHTML=(Object.keys(v).length?`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">${Object.values(v).map(n=>`<img src="${q('/media/'+n)}" style="width:100%;border-radius:14px">`).join('')}</div>`:'<div class="muted">No sheet yet. Edit bible.md, then Draft sheet.</div>')+
+    H('#bibleBody').innerHTML=(Object.keys(v).length?`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">${Object.values(v).map(n=>`<img src="${q('/media/'+n)}" style="width:100%;border-radius:14px">`).join('')}</div>`:'<div class="muted">No sheet yet. Edit bible.md, then Draft sheet.</div>')+
       `<div class="acts"><span class="delta" style="${b.approved?'':'background:var(--accent-soft);color:var(--accent)'}">${b.approved?'approved':'not approved'}</span><span class="delta" style="background:rgba(31,26,23,.06);color:var(--muted)">$${(S.gen_spend||0).toFixed(2)} of $${S.gen_budget} this month</span></div>`}
-  $('#ytBox').innerHTML=!y.configured?'<span class="muted">Waiting for Google Cloud keys</span>':
+  H('#ytBox').innerHTML=!y.configured?'<span class="muted">Waiting for Google Cloud keys</span>':
     y.connected?`<div class="row" style="padding:0"><div class="ri">▶</div><div class="t"><b>${esc(y.channel)}</b><span>uploads ${esc(y.privacy)}</span></div><a class="btn" href="${q('/oauth/youtube/start')}">Reconnect</a></div>`:
     `<a class="btn accent" style="background:var(--accent);color:#fff" href="${q('/oauth/youtube/start')}">Connect YouTube</a><div class="muted" style="margin-top:8px;font-size:12px">Pick this channel when Google asks.</div>`;
 }
@@ -357,11 +367,11 @@ function renderSheet(){
   if(r.stage==='rejected') a.push(`<button onclick="act('restore','${r.name}')">Back to queue</button>`,`<button class="ghost" onclick="editMode()">Edit</button>`);
   if(r.stage==='approved'||r.stage==='posting') a.push(`<button onclick="act('restore','${r.name}')">Back to queue</button>`);
   const src=r.source||{};
-  $('#sheetBox').innerHTML=`<video src="${q(r.video)}" poster="${q(r.cover)}" controls playsinline autoplay muted></video>
+  $('#sheetBox').innerHTML=`<button class="icon x" onclick="closeSheet()" aria-label="Close">✕</button><video src="${q(r.video)}" poster="${q(r.cover)}" controls playsinline autoplay muted></video>
    <div><div style="display:flex;justify-content:space-between;gap:8px;align-items:start"><div><span class="tag ${r.stage}" style="position:static">${esc(r.stage)}</span>
      <h2 style="margin:10px 0 4px;font-size:20px;line-height:1.25">${esc(r.title||r.hook)}</h2>
      <div class="muted" style="font-size:12px">${esc(src.title||'')}${src.year?' · '+src.year:''} · ${esc(r.style||'')} · ${esc(r.name)}</div></div>
-     <button class="icon" onclick="closeSheet()">✕</button></div>
+     </div>
     ${r.perf?`<div class="acts"><span class="delta">${fmt(r.perf.views)} views</span><span class="delta" style="background:rgba(31,26,23,.06);color:var(--muted)">${r.perf.likes||0} likes</span>${r.perf.completion?`<span class="delta">${Math.round(r.perf.completion)}% watched</span>`:''}</div>`:''}
     <div class="scores">${sc}</div>
     ${r.hook&&r.title?`<div class="note"><b>On screen:</b> ${esc(r.hook)}</div>`:''}
@@ -370,24 +380,29 @@ function renderSheet(){
     ${(r.gates||[]).length?`<div class="note" style="color:var(--bad)"><b>Gates:</b> ${esc(r.gates.join('; '))}</div>`:''}
     ${r.owner_note?`<div class="note"><b>Your note:</b> ${esc(r.owner_note)}</div>`:''}
     <div id="editBox"></div>${st}
-    <div class="acts">${a.join('')}</div></div>`;
+    <div class="acts bar">${a.join('')}</div></div>`;
 }
-function openSheet(n){open=n;renderSheet();$('#sheet').classList.add('open')}
-function closeSheet(){open=null;$('#sheet').classList.remove('open');$('#sheetBox').innerHTML=''}
+function openSheet(n){open=n;renderSheet();$('#sheet').classList.add('open');document.body.style.overflow='hidden'}
+function closeSheet(){open=null;$('#sheet').classList.remove('open');$('#sheetBox').innerHTML='';document.body.style.overflow=''}
 function editMode(){const r=S.reels.find(x=>x.name===open);
   $('#editBox').innerHTML=`<div class="note"><div class="label">On-screen text</div><input class="f" id="mHook" value="${esc(r.hook||'')}" style="margin:6px 0 10px">
    <div class="label">Narration</div><textarea id="mNarr" style="min-height:90px;margin-top:6px">${esc(r.narration||'')}</textarea>
    <div class="acts"><button class="accent" onclick="submitRerender()">Re-render</button><span class="muted" style="font-size:12px">Same cut; new text, voice and critic review.</span></div></div>`}
 async function post(url,body){const r=await fetch(q(url),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})});const j=await r.json().catch(()=>({}));if(!r.ok)alert(j.error||'failed');return j}
-async function act(kind,name){closeSheet();await post(`/api/${kind}/${name}`);load()}
-async function rejectReel(name){closeSheet();const note=prompt('Why? (optional, goes into the activity feed)')||'';await post(`/api/reject/${name}`,{note});load()}
-async function runNow(id){const j=await post('/api/run',{films:1,id:id||null});if(j.ok){load()}}
+const BUSY=new Set();
+function toast(t,ms){let el=$('#toast');if(!el){el=document.createElement('div');el.id='toast';el.className='toast';document.body.appendChild(el)}el.textContent=t;el.classList.add('on');clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove('on'),ms||2600)}
+const ACT_MSG={approve:'Approved. Posting now…',restore:'Moved back to the queue'};
+async function act(kind,name){if(BUSY.has(name))return;BUSY.add(name);closeSheet();
+  const r=S&&S.reels.find(x=>x.name===name); if(r&&kind==='approve'){r.stage='posting';render()}
+  toast(ACT_MSG[kind]||'Done');try{await post(`/api/${kind}/${name}`)}finally{setTimeout(()=>BUSY.delete(name),8000);load()}}
+async function rejectReel(name){const note=prompt('Why? (optional, goes into the activity feed)');if(note===null)return;closeSheet();toast('Rejected');await post(`/api/reject/${name}`,{note});load()}
+async function runNow(id){if(S&&S.running){toast('A run is already going');return}toast('New run started. Reels appear here when ready.',3500);const j=await post('/api/run',{films:1,id:id||null});load()}
 async function feature(){const id=$('#runId').value.trim();if(!id){alert('Enter an Internet Archive id first');return}await post('/api/feature',{id});load()}
 async function togglePause(){await post('/api/pause',{on:!S.paused});load()}
 $('#brainText').addEventListener('input',()=>brainDirty=true);
 async function saveBrain(){await post(`/api/brain/${brainKey}`,{text:$('#brainText').value});brainDirty=false;$('#brainMsg').textContent='Saved';setTimeout(()=>$('#brainMsg').textContent='',2000);load()}
 async function copyCap(name){const r=S.reels.find(x=>x.name===name);const t=(r.title?r.title+'\n\n':'')+(r.caption||'');try{await navigator.clipboard.writeText(t);alert('Caption copied')}catch(e){prompt('Copy the caption',t)}}
-async function submitRerender(){const n=open,h=$('#mHook').value,t=$('#mNarr').value;closeSheet();await post(`/api/rerender/${n}`,{hook:h,narration:t});load()}
+async function submitRerender(){const n=open,h=$('#mHook').value,t=$('#mNarr').value;closeSheet();toast('Re-rendering. This takes a minute or two.',3500);await post(`/api/rerender/${n}`,{hook:h,narration:t});load()}
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSheet()});
 load(); setInterval(load,5000);
 </script>
