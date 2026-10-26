@@ -277,7 +277,7 @@ def make_short(entry: dict, cfg: dict) -> str:
     tmp = Path(tempfile.mkdtemp(prefix="lrshort_"))
     W, H = 1080, 1920
     vf = f"scale={W}:{H}"      # the vertical master was already cut around the interesting part
-    text_png = edit.overlay_text(W, H, int(H * 0.36), int(H * 0.28), "", cfg["edit"].get("watermark", ""),
+    text_png = edit.overlay_text(W, H, int(H * 0.60), int(H * 0.27), "", cfg["edit"].get("watermark", ""),
                                  tmp / "wm.png")
     line = (entry.get("short_line") or "").strip()
     line_png = _quiet_line(line, W, H, tmp / "line.png") if line else None
@@ -333,7 +333,7 @@ def _quiet_line(text: str, W: int, H: int, out: Path) -> Path:
         f = _sans(56)
     d = ImageDraw.Draw(img)
     tw = d.textlength(text, font=f)
-    x, y = (W - tw) / 2, H * 0.70
+    x, y = (W - tw) / 2, H * 0.15
     shadow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     ImageDraw.Draw(shadow).text((x, y + 3), text, font=f, fill=(0, 0, 0, 170))
     img = Image.alpha_composite(img, shadow.filter(ImageFilter.GaussianBlur(6)))
@@ -360,7 +360,7 @@ def make_long(cfg: dict, minutes: float | None = None) -> str | None:
     lcfg = cfg.get("footage", {})
     need = float(lcfg.get("min_library_minutes", 12)) * 60
     if total < need:
-        st.activity("system", f"Long video waiting for footage: {total / 60:.0f} of {need / 60:.0f} minutes polished")
+        st.activity("system", f"Long video waiting for footage: {total / 60:.1f} of {need / 60:.0f} minutes of landscape clips polished")
         return None
     max_repeat = int(lcfg.get("max_repeat", 3))
     target = min(float(minutes or lcfg.get("long_minutes", 60)) * 60, total * max_repeat)
