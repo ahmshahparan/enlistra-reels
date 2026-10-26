@@ -271,21 +271,21 @@ def render(video: Path, clip: Clip, out: Path, cfg: dict, film: dict | None = No
                 f"if(between(it,{p+a+hold:.2f},{p+a+hold+rel:.2f}),({p+a+hold+rel:.2f}-it)/{rel},0)))")
     n_seg = len(segs)
     cat = "".join(f"[{i}:v]" for i in range(n_seg)) + f"concat=n={n_seg}:v=1:a=0[cat];" if n_seg > 1 else "[0:v]null[cat];"
-    fg = (f"{cat}[cat]fps={fps},scale={pic_w}:{pic_h},setsar=1,"
+    fg = (f"{cat}[cat]fps={fps},hqdn3d=2:1.5:4:3,scale={pic_w}:{pic_h}:flags=lanczos,setsar=1,"
           f"zoompan=z='{zoom}':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={pic_w}x{pic_h}:fps={fps},"
-          f"eq=contrast=1.06:brightness=0.01,noise=c0s=5:c0f=t,"
+          f"eq=contrast=1.06:brightness=0.01,"
           f"setpts=PTS/{speed}[fg]")
     card_idx = n_seg
     if cold:
         # footage fills the width, over a darkened blur of itself; text overlay on top;
         # 6% crop removes the ragged edges old prints carry
-        crop = (f"crop=iw*0.94:ih*0.94,")
+        crop = (f"crop=iw*0.94:ih*0.94,hqdn3d=2:1.5:4:3,")
         fg = (f"{cat}[cat]fps={fps},{crop}split=2[c_fg][c_bg];"
               f"[c_bg]scale=270:480:force_original_aspect_ratio=increase,crop=270:480,boxblur=12:2,"
               f"eq=brightness=-0.22:saturation=0.6,scale={W}:{H},setsar=1,setpts=PTS/{speed}[bg];"
-              f"[c_fg]scale={pic_w}:{pic_h},setsar=1,"
+              f"[c_fg]scale={pic_w}:{pic_h}:flags=lanczos,setsar=1,"
               f"zoompan=z='{zoom}':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={pic_w}x{pic_h}:fps={fps},"
-              f"eq=contrast=1.10:brightness=0.02,unsharp=5:5:0.6,"
+              f"eq=contrast=1.08:brightness=0.02,unsharp=5:5:0.45:5:5:0.0,"
               f"setpts=PTS/{speed}[fg]")
         vgraph = (f"{fg};[bg][fg]overlay=0:{pic_y}:shortest=1[v1];"
                   f"[v1][{card_idx}:v]overlay=0:0:shortest=1,"
@@ -361,7 +361,8 @@ def render(video: Path, clip: Clip, out: Path, cfg: dict, film: dict | None = No
     fc = ";".join([vgraph] + agraph)
     cmd = ["ffmpeg", "-y", "-v", "error", *inputs, "-filter_complex", fc,
            "-map", "[vout]", "-map", "[aout]", "-t", f"{dur:.2f}",
-           "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p",
+           "-c:v", "libx264", "-preset", "slow", "-crf", "17", "-tune", "film", "-pix_fmt", "yuv420p",
+           "-maxrate", "16M", "-bufsize", "32M",
            "-c:a", "aac", "-b:a", "160k", "-ar", "44100", "-movflags", "+faststart", str(out)]
     log.info("rendering %s (%.1fs, speed %.2f, %d sfx, narration=%s)", out.name, dur, speed,
              len(mix) - (2 if narr and music else 1 if (narr or music) else 0), bool(narr))

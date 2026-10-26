@@ -4,6 +4,7 @@ schedule: ["10:30", "16:30"]          # staggered from the Chaplin runs
 source:
   pd_year_cutoff: 1929
   require_identified: false
+  min_height: 480
   queries:
     - 'mediatype:(movies) AND creator:("Fish and Wildlife Service")'
     - 'collection:(prelinger) AND (subject:(animals) OR subject:(wildlife) OR subject:(birds) OR subject:(insects))'

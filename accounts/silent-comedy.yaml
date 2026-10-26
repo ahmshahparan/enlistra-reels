@@ -1,3 +1,13 @@
 # Enlistra Reels: public domain silent comedy (Chaplin first). Base config applies.
 name: Enlistra Reels
 schedule: ["09:00", "13:00", "19:00"]
+source:
+  min_height: 480
+  priority_ids:            # HD prints of pre-1918 Chaplin shorts found on the Internet Archive
+    - the-rink-1916
+    - the-tramp-1915-directed-by-charlie-chaplin
+    - silent-a-burlesque-on-carmen
+    - silent-the-vagabond
+    - the-champion-1915-directed-by-charlie-chaplin
+    - charlie-chaplin-.-the-cure-1917-classic-siletnt-film-noir-comedy
+    - CAUGHTINTHERAINCharlieChaplinSilentAMackSennettKeystoneComedy

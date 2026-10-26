@@ -105,11 +105,11 @@ def render(identifier: str, cfg: dict, limit_s: float | None = None) -> Path:
     # 1. restored film, 16:9 pillarboxed over a soft blur, no source audio
     body = tmp / "body.mp4"
     vf = (f"split=2[a][b];[b]scale=480:270:force_original_aspect_ratio=increase,crop=480:270,boxblur=10:2,"
-          f"eq=brightness=-0.25,scale={W}:{H}[bg];[a]hqdn3d=3:3:6:6,deflicker=size=5,unsharp=5:5:0.5,"
-          f"eq=contrast=1.06,scale=-2:{H}[fg];[bg][fg]overlay=(W-w)/2:0,fps=24,format=yuv420p")
+          f"eq=brightness=-0.25,scale={W}:{H}[bg];[a]hqdn3d=2.5:2:5:4,deflicker=size=5,"
+          f"eq=contrast=1.06,scale=-2:{H}:flags=lanczos,unsharp=5:5:0.4[fg];[bg][fg]overlay=(W-w)/2:0,fps=24,format=yuv420p")
     subprocess.run(["ffmpeg", "-y", "-v", "error", *(["-t", str(limit_s)] if limit_s else []), "-i", str(video),
                     "-filter_complex", vf, "-an",
-                    "-c:v", "libx264", "-preset", "medium", "-crf", "20", str(body)], check=True)
+                    "-c:v", "libx264", "-preset", "slow", "-crf", "18", "-tune", "film", str(body)], check=True)
     dur = edit._dur(body)
 
     # 2. intro + end cards with narration

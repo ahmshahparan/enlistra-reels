@@ -220,5 +220,11 @@ def run(cfg: dict, films: int = 1, identifier: str | None = None, post_now: bool
         return []
     outputs: list[Path] = []
     for film in films_list:
-        outputs += process_film(film, cfg, work, post_now)
+        try:
+            outputs += process_film(film, cfg, work, post_now)
+        finally:
+            # HD prints are big; free the disk (a re-render downloads the film again)
+            for f in (work / "src").glob(f"{film.identifier}.*"):
+                if f.stat().st_size > 300_000_000:
+                    f.unlink()
     return outputs

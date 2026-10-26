@@ -12,9 +12,10 @@ source:
     - 'subject:(charlie chaplin) AND mediatype:movies'
     - 'creator:(keaton) AND mediatype:movies'
     - 'subject:(silent comedy) AND mediatype:movies'
-  max_download_mb: 400
+  max_download_mb: 1500
+  min_height: 360           # skip prints below this; sharper copies are preferred automatically
   require_identified: true   # skip uploads with no year that the model cannot identify (compilations)
-  prefer_formats: [mp4, ogv, mkv]
+  prefer_formats: [mp4, mkv, mov, m4v, mpeg, ogv]
 
 select:
   clip_seconds_min: 24   # candidate window size; the vision step cuts 8 to 25 s inside it

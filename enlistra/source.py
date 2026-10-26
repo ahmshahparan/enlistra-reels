@@ -80,18 +80,23 @@ def search(query: str, rows: int = 25) -> list[dict]:
     return r.json()["response"]["docs"]
 
 
+def _height(f: dict) -> int:
+    try:
+        return int(f.get("height") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 def pick_file(files: list[dict], prefer: list[str], max_mb: float) -> dict | None:
-    best = None
-    for ext in prefer:
-        cands = [
-            f for f in files
-            if f["name"].lower().endswith("." + ext) and int(f.get("size", 0)) / 1e6 <= max_mb
-        ]
-        if cands:
-            # smallest acceptable file of the preferred format keeps downloads cheap
-            best = min(cands, key=lambda f: int(f.get("size", 0)))
-            break
-    return best
+    """The sharpest video file under the size cap (resolution first, then preferred
+    container, then the smaller file). Archive '512kb' derivatives are a last resort."""
+    rank = {ext: i for i, ext in enumerate(prefer)}
+    cands = [f for f in files
+             if f["name"].lower().rsplit(".", 1)[-1] in rank and int(f.get("size", 0)) / 1e6 <= max_mb]
+    if not cands:
+        return None
+    return max(cands, key=lambda f: (_height(f), "512kb" not in f["name"].lower(),
+                                     -rank[f["name"].lower().rsplit(".", 1)[-1]], -int(f.get("size", 0))))
 
 
 def resolve(identifier: str, cfg: dict) -> Film | None:
@@ -107,6 +112,9 @@ def resolve(identifier: str, cfg: dict) -> Film | None:
         log.info("skip %s (%s): %s", identifier, title, reason)
         return None
     f = pick_file(d.get("files", []), cfg["prefer_formats"], cfg["max_download_mb"])
+    if f and _height(f) and _height(f) < int(cfg.get("min_height", 0)):
+        log.info("skip %s: best copy is %sp, below %sp", identifier, _height(f), cfg.get("min_height"))
+        return None
     if not f:
         log.info("skip %s: no usable video file under %s MB", identifier, cfg["max_download_mb"])
         return None
@@ -142,6 +150,14 @@ def download(film: Film, dest_dir: Path) -> Path:
 def find_films(cfg: dict, already: set[str], limit: int = 1) -> list[Film]:
     """Return up to `limit` new, free-to-use films across the configured queries."""
     found: list[Film] = []
+    for ident in cfg.get("priority_ids", []):          # known sharp prints first
+        if ident in already or any(f.identifier == ident for f in found):
+            continue
+        film = resolve(ident, cfg)
+        if film:
+            found.append(film)
+            if len(found) >= limit:
+                return found
     for q in cfg["queries"]:
         for doc in search(q):
             ident = doc["identifier"]
