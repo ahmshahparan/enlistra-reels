@@ -1,5 +1,5 @@
 # Wild Facts: real public domain wildlife footage + one surprising true fact.
-name: Wild Facts
+name: Enlistra Wild Facts
 schedule: off                       # turned on once the YouTube channel is connected
 source:
   pd_year_cutoff: 1929
@@ -14,7 +14,7 @@ select:
   candidates_per_film: 16
 edit:
   styles: [cold_narrated]
-  watermark: "@WildFacts"
+  watermark: "@enlistra_wild"
   music_dir: assets/music-nature
   music_volume: 0.55
   sfx: false
