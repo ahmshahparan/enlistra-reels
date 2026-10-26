@@ -1,6 +1,6 @@
 # Wild Facts: real public domain wildlife footage + one surprising true fact.
 name: Enlistra Wild Facts
-schedule: off                       # turned on once the YouTube channel is connected
+schedule: ["10:30", "16:30"]          # staggered from the Chaplin runs
 source:
   pd_year_cutoff: 1929
   require_identified: false
