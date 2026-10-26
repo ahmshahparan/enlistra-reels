@@ -1,4 +1,4 @@
-# Celeste Arden: character bible (draft for approval)
+# Celeste Arden: character bible (approved Oct 26, 2026; face reference: balcony portrait)
 
 ## Who she is
 Celeste Arden is an AI-generated luxury lifestyle persona, clearly an adult (late twenties).
