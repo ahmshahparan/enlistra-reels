@@ -1,0 +1,26 @@
+# Leaf & Ridge: the owner's own scenery footage (trees, leaves, roads, mountains), polished into
+# calm Shorts and long relaxing videos. Footage arrives through the dashboard upload button.
+name: Leaf & Ridge
+pipeline: footage
+schedule: ["11:00", "18:00"]       # one Short per run; a long video when a week has passed and footage allows
+footage:
+  shorts_per_clip: 2
+  long_every_days: 7
+  long_minutes: 60
+  min_library_minutes: 12          # wait until there is enough footage for a long video
+  max_repeat: 3                    # no clip appears more than 3 times in one long video
+edit:
+  watermark: "@leafandridge"
+  music_volume: 0.5
+  sfx: false
+post:
+  require_approval: true
+  auto_approve_score: 0            # own footage has no critic score: everything waits for the owner
+  daily_post_cap: 2
+  hashtags: ["#relaxing", "#nature", "#calm", "#shorts"]
+  yt_tags: ["relaxing nature", "calm music", "nature sounds", "relaxing music", "autumn", "forest", "scenic drive",
+            "mountains", "study music", "sleep music", "ambient nature", "peaceful"]
+  yt_category: "10"                # Music, where relaxing nature videos are browsed
+  playlist: "Leaf & Ridge Shorts"
+  desc_footer: |
+    Slow nature, real places, filmed by us. Subscribe: https://www.youtube.com/@leafandridge?sub_confirmation=1

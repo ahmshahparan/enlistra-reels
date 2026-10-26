@@ -328,6 +328,7 @@ def state():
         "account": store.current_account(), "accounts": store.accounts(),
         "analyst": {k: perf.get(k) for k in ("at", "videos", "views", "groups")},
         "pipeline": C().get("pipeline", "film_clips"),
+        "footage": _footage_summary() if C().get("pipeline") == "footage" else None,
         "bible": S().setting("bible_refs") if C().get("pipeline") == "character" else None,
         "gen_spend": (S().setting("gen_spend") or {}).get(time.strftime("%Y-%m")),
         "gen_budget": C().get("character", {}).get("monthly_budget_usd", 250), "tz": str(TZ), "store": S().kind,
@@ -339,6 +340,15 @@ def state():
         "config": {"reels_per_film": C()["select"]["reels_per_film"], "target": C().get("critic", {}).get("target_score"),
                    "accept": C().get("critic", {}).get("accept_score"), "platforms": C()["post"]["platforms"]},
     })
+
+
+def _footage_summary() -> dict:
+    lib = S().setting("footage_library") or []
+    busy = [k for k, v in (S().jobs() or {}).items() if k.startswith("polish-") and (v or {}).get("status") == "running"]
+    return {"clips": len(lib), "minutes": round(sum(e.get("dur", 0) for e in lib) / 60, 1),
+            "landscape_minutes": round(sum(e.get("dur", 0) for e in lib if not e.get("vertical")) / 60, 1),
+            "unused": sum(1 for e in lib if not e.get("shorts")), "polishing": len(busy),
+            "need_minutes": C().get("footage", {}).get("min_library_minutes", 12)}
 
 
 def _yt_status() -> dict:
@@ -422,6 +432,82 @@ def feature():
     if not ident:
         return jsonify(ok=False, error="give an Internet Archive id"), 400
     _job("feature", do_feature, ident)
+    return jsonify(ok=True)
+
+
+# ------------------------------------------------------------------ footage upload (Leaf & Ridge)
+UPLOADS: dict = {}
+
+
+def _safe(name: str) -> str:
+    import re
+    return re.sub(r"[^A-Za-z0-9._-]+", "_", name)[-80:] or "clip.mov"
+
+
+@app.post("/api/upload/start")
+def upload_start():
+    from enlistra import footage
+    import secrets as _s
+    j = request.json or {}
+    uid = _s.token_hex(6)
+    dest = footage.root() / "raw" / f"{uid}_{_safe(j.get('name') or 'clip.mov')}"
+    dest.write_bytes(b"")
+    UPLOADS[uid] = {"path": str(dest), "size": int(j.get("size") or 0), "name": j.get("name") or dest.name,
+                    "account": store.current_account()}
+    return jsonify(ok=True, id=uid)
+
+
+@app.post("/api/upload/<uid>/chunk")
+def upload_chunk(uid):
+    u = UPLOADS.get(uid)
+    if not u:
+        return jsonify(ok=False, error="unknown upload; start again"), 404
+    p = Path(u["path"])
+    have = p.stat().st_size
+    off = int(request.args.get("offset", have))
+    if off != have:
+        return jsonify(ok=False, have=have), 409
+    with open(p, "ab") as fh:
+        while True:
+            buf = request.stream.read(1 << 20)
+            if not buf:
+                break
+            fh.write(buf)
+    return jsonify(ok=True, have=p.stat().st_size)
+
+
+def do_polish(path: str, name: str):
+    from enlistra import footage
+    with RUN_LOCK:
+        try:
+            e = footage.polish(Path(path), C(), name)
+        finally:
+            Path(path).unlink(missing_ok=True)
+    return (e or {}).get("id") or "skipped"
+
+
+@app.post("/api/upload/<uid>/done")
+def upload_done(uid):
+    u = UPLOADS.pop(uid, None)
+    if not u:
+        return jsonify(ok=False, error="unknown upload"), 404
+    size = Path(u["path"]).stat().st_size
+    if u["size"] and size != u["size"]:
+        Path(u["path"]).unlink(missing_ok=True)
+        return jsonify(ok=False, error=f"upload incomplete ({size} of {u['size']} bytes)"), 400
+    S().activity("owner", f"Uploaded footage: {u['name']} ({size / 1e6:.0f} MB); polishing next")
+    _job(f"polish-{uid}", do_polish, u["path"], u["name"])
+    return jsonify(ok=True)
+
+
+@app.post("/api/footage/long")
+def footage_long():
+    from enlistra import footage
+
+    def go():
+        with RUN_LOCK:
+            return footage.make_long(C())
+    _job("long", go)
     return jsonify(ok=True)
 
 

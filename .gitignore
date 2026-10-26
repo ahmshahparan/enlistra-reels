@@ -10,3 +10,4 @@ secrets.env
 *.tgz
 *.command
 .DS_Store
+assets/music-calm/

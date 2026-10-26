@@ -12,6 +12,7 @@ Use `store.get()`; it picks the backend from the environment.
 from __future__ import annotations
 
 import json
+import shutil
 import logging
 import os
 import time
@@ -208,7 +209,21 @@ class SupabaseStore(FileStore):
             raise RuntimeError(f"supabase {method} {table}: {r.status_code} {r.text[:300]}")
         return r.json() if r.content and "json" in r.headers.get("content-type", "") else None
 
+    BIG = 45 * 1024 * 1024      # Supabase storage refuses objects over 50 MB on this plan
+
+    def _vault(self) -> Path:
+        """Persistent disk for media too big for the database storage (long videos, raw footage)."""
+        base = os.environ.get("MEDIA_DIR") or ("/data/media" if Path("/data").is_dir() else str(self.work / "media"))
+        p = Path(base)
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+
     def _upload(self, path: Path, obj: str, ctype: str):
+        if path.stat().st_size > self.BIG:
+            dest = self._vault() / obj.replace("/", "__")
+            if path.resolve() != dest.resolve():
+                shutil.copyfile(path, dest)
+            return
         with open(path, "rb") as fh:
             r = requests.post(f"{self.url}/storage/v1/object/{self.BUCKET}/{obj}", headers={
                 **self.h, "Content-Type": ctype, "x-upsert": "true"}, data=fh, timeout=300)
@@ -216,6 +231,15 @@ class SupabaseStore(FileStore):
             raise RuntimeError(f"storage upload {obj}: {r.status_code} {r.text[:200]}")
 
     def _download(self, obj: str, dest: Path) -> Path | None:
+        big = self._vault() / obj.replace("/", "__")
+        if big.exists():
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            if not dest.exists():
+                try:
+                    dest.symlink_to(big)
+                except OSError:
+                    shutil.copyfile(big, dest)
+            return dest
         r = requests.get(f"{self.url}/storage/v1/object/{self.BUCKET}/{obj}", headers=self.h, timeout=300, stream=True)
         if r.status_code != 200:
             return None

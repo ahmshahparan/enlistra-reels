@@ -259,6 +259,9 @@ def run(cfg: dict, films: int = 1, identifier: str | None = None, post_now: bool
         if kind == "character":
             from . import character
             return character.run(cfg, post_now=post_now)
+        if kind == "footage":
+            from . import footage
+            return footage.run(cfg, post_now=post_now)
         return []
     if paused(cfg):
         log.info("paused (kill switch); not running")

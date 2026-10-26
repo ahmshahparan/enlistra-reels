@@ -94,6 +94,45 @@ def ensure_nature(root: str | Path = "assets", seconds: float = 150.0) -> list[P
     return out
 
 
+# Full-length calm pieces for long relaxing videos (Leaf & Ridge): piano first, then slow strings.
+CALM_MUSIC = [
+    "-01-GoldbergVariationsBwv.988-Aria", "SonataInAMajorD.664-02-Andante", "SonataInEFlatMajorD.568-02-AndanteMolto",
+    "-14-GoldbergVariationsBwv.988-Variation13", "SonataInAMinorD.784-02-Andante", "SonataInCMinorD.958-02-Adagio",
+    "PeerGyntSuiteNo.1Op.46-01-Morning", "Lark-02-AdagioCantabile", "American-02-Lento",
+    "K465Dissonance-02-AndanteCantabile", "SymphonyNo.3InFMajorOp.90-02-Andante", "StringQuartetNo.2InDMajor-03-NocturneAndante",
+    "SonataInAMinorD.845-02-AndantePocoMosso", "-32-GoldbergVariationsBwv.988-AriaDaCapo",
+]
+
+
+def ensure_calm(root: str | Path = "assets") -> list[Path]:
+    """Full-length calm public domain recordings (Musopen, Public Domain Mark) for long videos."""
+    root = Path(root)
+    files = [f["name"] for f in requests.get(f"https://archive.org/metadata/{MUSOPEN}", timeout=60).json()["files"]
+             if f["name"].endswith(".mp3")]
+    out = []
+    for i, key in enumerate(CALM_MUSIC):
+        name = next((f for f in files if key in f), None)
+        if not name:
+            log.warning("calm track %s not found", key)
+            continue
+        dst = root / "music-calm" / f"{i:02d}_{Path(name).stem[-40:]}.m4a"
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        if not dst.exists():
+            try:
+                src = _fetch(MUSOPEN, name, root / "raw" / f"calm_{i:02d}.mp3")
+                subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(src), "-af", "loudnorm=I=-22:TP=-3:LRA=11",
+                                "-c:a", "aac", "-b:a", "160k", str(dst)], check=True)
+                src.unlink(missing_ok=True)
+            except Exception as e:  # noqa: BLE001
+                log.warning("calm track %s failed: %s", key, e)
+                continue
+        out.append(dst)
+    (root / "music-calm" / "CREDITS.md").write_text(
+        "# Leaf & Ridge music\n\nMusopen recordings, Public Domain Mark 1.0, via "
+        "https://archive.org/details/MusopenCollectionAsFlac\n" + "".join(f"- {p.stem}\n" for p in out))
+    return out
+
+
 def _first_mp3(identifier: str) -> str:
     d = requests.get(f"https://archive.org/metadata/{identifier}", timeout=30).json()
     for f in d["files"]:

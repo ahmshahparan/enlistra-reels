@@ -252,9 +252,10 @@ button[disabled]{opacity:.55;pointer-events:none}
   <a data-v="reels"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M10 9l5 3-5 3z" fill="currentColor"/></svg><span>Reels</span></a>
   <a data-v="brain"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4a4 4 0 0 0-4 4 4 4 0 0 0-2 7 4 4 0 0 0 6 4V4z"/><path d="M12 4a4 4 0 0 1 4 4 4 4 0 0 1 2 7 4 4 0 0 1-6 4"/></svg><span>Brain</span></a>
   <a data-v="activity"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg><span>Activity</span></a>
-  <button class="fab" onclick="runNow()" title="New run">+</button>
+  <button class="fab" onclick="S&&S.pipeline==='footage'?pickFootage():runNow()" title="New run or add footage">+</button>
 </nav>
 
+<input type="file" id="fileIn" accept="video/*,.mov,.mp4,.m4v" multiple hidden>
 <div class="sheet" id="sheet" onclick="if(event.target===this)closeSheet()"><div class="box glass" id="sheetBox"></div></div>
 
 <script>
@@ -331,7 +332,9 @@ function render(){
   ].map(([i,t,s,on,fn])=>`<div class="row"><div class="ri">${i}</div><div class="t"><b>${t}</b><span>${esc(s)}</span></div><div class="tog ${on?'on':''} ${fn?'':'ro'}" ${fn?`onclick="${fn}"`:''}></div></div>`).join('');
   // waiting row
   const waiting=S.reels.filter(r=>r.stage==='pending').slice(0,5);
-  H('#waiting').innerHTML=waiting.map(reelCard).join('')+`<div class="reel glass add" onclick="runNow()"><div><div class="plus">+</div><b>New run</b><div class="muted" style="font-size:12px">find a film, cut reels</div></div></div>`;
+  const FOOT=S.pipeline==='footage', fs=S.footage||{};
+  H('#waiting').innerHTML=waiting.map(reelCard).join('')+(FOOT?`<div class="reel glass add" onclick="pickFootage()"><div><div class="plus">+</div><b>Add footage</b><div class="muted" style="font-size:12px">${fs.clips||0} clips · ${fs.minutes||0} min${fs.polishing?` · polishing ${fs.polishing}`:''}</div></div></div>`
+    :`<div class="reel glass add" onclick="runNow()"><div><div class="plus">+</div><b>New run</b><div class="muted" style="font-size:12px">find a film, cut reels</div></div></div>`);
   // feeds
   const ev=e=>`<div class="ev"><span class="faint">${esc((e.t||'').slice(11,16))}</span><span><span class="k ${esc(e.kind)}">${esc(e.kind)}</span>${esc(e.text)}</span></div>`;
   H('#miniFeed').innerHTML=(S.activity||[]).slice(0,5).map(ev).join('')||'<div class="empty">No activity yet</div>';
@@ -399,6 +402,25 @@ async function act(kind,name){if(BUSY.has(name))return;BUSY.add(name);closeSheet
   toast(ACT_MSG[kind]||'Done');try{await post(`/api/${kind}/${name}`)}finally{setTimeout(()=>BUSY.delete(name),8000);load()}}
 async function rejectReel(name){const note=prompt('Why? (optional, goes into the activity feed)');if(note===null)return;closeSheet();toast('Rejected');await post(`/api/reject/${name}`,{note});load()}
 async function runNow(id){if(S&&S.running){toast('A run is already going');return}toast('New run started. Reels appear here when ready.',3500);const j=await post('/api/run',{films:1,id:id||null});load()}
+function pickFootage(){$('#fileIn').value='';$('#fileIn').click()}
+$('#fileIn').addEventListener('change',async e=>{const files=[...e.target.files];if(!files.length)return;
+  const CH=8*1024*1024;let i=0;
+  for(const f of files){i++;
+    try{
+      const st=await (await fetch(q('/api/upload/start'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:f.name,size:f.size})})).json();
+      if(!st.ok) throw new Error(st.error||'start failed');
+      let off=0,tries=0;
+      while(off<f.size){
+        const r=await fetch(q(`/api/upload/${st.id}/chunk?offset=${off}`),{method:'POST',headers:{'Content-Type':'application/octet-stream'},body:f.slice(off,off+CH)}).catch(()=>null);
+        const j=r?await r.json().catch(()=>({})):{};
+        if(r&&(r.ok||r.status===409)&&j.have!=null){off=j.have;tries=0}else if(++tries>5){throw new Error('network')}
+        toast(`Uploading ${i} of ${files.length}: ${Math.floor(100*off/f.size)}%  (keep this page open)`,60000);
+      }
+      const d=await (await fetch(q(`/api/upload/${st.id}/done`),{method:'POST'})).json();
+      if(!d.ok) throw new Error(d.error||'failed');
+    }catch(err){toast(`${f.name}: upload failed (${err.message}). Try again.`,6000);continue}
+  }
+  toast(`${files.length} clip${files.length>1?'s':''} uploaded. Polishing now; Shorts appear here when ready.`,5000);load()});
 async function feature(){const id=$('#runId').value.trim();if(!id){alert('Enter an Internet Archive id first');return}await post('/api/feature',{id});load()}
 async function togglePause(){await post('/api/pause',{on:!S.paused});load()}
 $('#brainText').addEventListener('input',()=>brainDirty=true);
