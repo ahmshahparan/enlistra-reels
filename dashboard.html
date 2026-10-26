@@ -156,8 +156,9 @@ button[disabled]{opacity:.55;pointer-events:none}
   .tabbar a{padding:10px 12px}
   .tabbar a span{display:none}
   .sheet{padding:0;align-items:flex-end}
-  .sheet .box{grid-template-columns:1fr;border-radius:26px 26px 0 0;max-height:94vh}
-  .sheet video{max-height:46vh}
+  .sheet .box{grid-template-columns:1fr;border-radius:26px 26px 0 0;max-height:94vh;max-height:calc(100dvh - 10px - env(safe-area-inset-top))}
+  .sheet{height:100vh;height:100dvh}
+  .sheet video{max-height:46vh;max-height:44dvh}
   .sheet .box{padding-top:14px}
 }
 </style>
