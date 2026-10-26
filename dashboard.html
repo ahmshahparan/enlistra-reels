@@ -140,7 +140,8 @@ pre.log{font:11.5px/1.45 ui-monospace,Menlo,monospace;color:var(--muted);white-s
   .head .dark{display:none}
   .top{grid-template-columns:auto minmax(0,1fr) auto;gap:8px}
   .ask{min-width:0}
-  .bars{height:120px}
+  .bars{height:130px;margin-top:6px}
+  #barsLabel{text-align:left!important}
   .reels{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
   .add{min-height:200px}
   .tabbar{width:calc(100% - 24px);justify-content:space-between}
@@ -179,7 +180,7 @@ pre.log{font:11.5px/1.45 ui-monospace,Menlo,monospace;color:var(--muted);white-s
               <div class="bar"><i id="queueBar" style="width:0"></i></div>
               <div class="faint" style="font-size:12px;margin-top:6px" id="queueTxt"></div>
             </div>
-            <div><div class="label" style="text-align:right">Views per posted reel</div><div class="bars" id="bars"></div></div>
+            <div><div class="label" id="barsLabel" style="text-align:right">Views per posted reel</div><div class="bars" id="bars"></div></div>
           </div>
         </div>
         <div class="card glass">
@@ -305,7 +306,7 @@ function render(){
   $('#queueTxt').textContent=`${posted} of ${S.reels.length} reels posted`;
   const mx=Math.max(1,...perf.map(r=>Number(r.perf.views||0)));
   const best=perf.reduce((b,r)=>Number(r.perf.views)>(b?Number(b.perf.views):-1)?r:b,null);
-  $('#bars').innerHTML=perf.length?perf.map(r=>`<div class="b" title="${esc(r.title||r.hook)}: ${r.perf.views} views"><div class="col ${r===best?'top':''}" style="height:${Math.max(6,Math.round(110*Number(r.perf.views||0)/mx))}px"></div><small>${fmt(r.perf.views)}</small></div>`).join('')
+  $('#bars').innerHTML=perf.length?perf.map(r=>`<div class="b" title="${esc(r.title||r.hook)}: ${r.perf.views} views"><div class="col ${r===best?'top':''}" style="height:${Math.max(6,Math.round(100*Number(r.perf.views||0)/mx))}px"></div><small>${fmt(r.perf.views)}</small></div>`).join('')
     :`<div class="muted" style="align-self:center;width:100%;text-align:center">No stats yet</div>`;
   // automation
   const y=S.youtube||{};
