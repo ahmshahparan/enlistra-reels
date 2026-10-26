@@ -151,6 +151,13 @@ def process_film(film, cfg: dict, work: Path, post_now: bool) -> list[Path]:
                     film_info["year"] = res["year"]
                 if res.get("film_title") and len(res["film_title"]) > 3:
                     film_info["title"] = res["film_title"]
+            elif scfg.get("use_vision", True):
+                # the crude text ranker makes un-narrated, untitled cuts nobody should see; stop instead
+                activity(cfg, "error", f"Clip picker failed on {film.title}; " +
+                         ("skipped this film" if rnd == 0 else f"kept the {len(kept)} reel(s) already made"))
+                if rnd == 0:
+                    return []
+                break
             else:
                 log.info("using text ranker")
                 clips = select.llm_rank(film.title, film.year, cands, need, scfg)

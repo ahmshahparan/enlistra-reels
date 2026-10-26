@@ -157,14 +157,14 @@ def rank(video: Path, film_title: str, year, candidates: list[Clip], want: int,
     text, msg = "", None
     for attempt in range(2):
         msg = client.messages.create(
-            model=cfg.get("anthropic_model", "claude-sonnet-5-5"), max_tokens=8000,
+            model=cfg.get("anthropic_model", "claude-sonnet-5-5"), max_tokens=16000,
             system=system + ("\n\nBRAND BRAIN (house rules, override the defaults above):\n" + brain() if brain() else ""),
             messages=[{"role": "user", "content": content}])
         text = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
         if "{" in text and "}" in text:
             break
         log.warning("vision reply had no JSON (stop_reason=%s); retrying", msg.stop_reason)
-        content = content + [{"type": "text", "text": "Reply with the JSON object only."}]
+        content = content + [{"type": "text", "text": "Your last reply ran out of room before the JSON. Reply with the JSON object only: no analysis, no preamble, short field values."}]
     text = text[text.find("{"): text.rfind("}") + 1]
     data = json.loads(text)
     log.info("vision used %d in / %d out tokens", msg.usage.input_tokens, msg.usage.output_tokens)
