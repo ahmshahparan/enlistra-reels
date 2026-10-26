@@ -60,8 +60,8 @@ RUN_LOCK = threading.Lock()
 @app.before_request
 def _auth():
     store.use(request.args.get("a") or None)
-    if not PASSWORD:
-        return None
+    if not PASSWORD or request.path in ("/oauth/youtube/callback", "/health"):
+        return None                      # the callback is protected by its one-time state value
     a = request.headers.get("Authorization", "")
     if a.startswith("Basic "):
         try:
