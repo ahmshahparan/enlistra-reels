@@ -288,8 +288,7 @@ def run(cfg: dict, films: int = 1, identifier: str | None = None, post_now: bool
         finally:
             # HD prints are big; free the disk (a re-render downloads the film again)
             for f in (work / "src").glob(f"{film.identifier}.*"):
-                if f.stat().st_size > 300_000_000:
-                    f.unlink()
+                f.unlink(missing_ok=True)      # the volume is small; a re-render downloads the film again
     try:   # visual duplicate check against everything already posted or queued
         from . import dedupe
         dups = dedupe.audit(store.current_account(), apply=True)

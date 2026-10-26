@@ -164,6 +164,7 @@ def do_run(films: int, ident: str | None, trigger: str = "owner"):
     acct = store.current_account()
     S().activity("system", f"Run queued by {trigger}" + (f" for {ident}" if ident else f" ({films} film)"))
     with RUN_LOCK:
+        _housekeep()
         cmd = [sys.executable, "cli.py", "run", "--films", str(films), "--account", acct] + (["--id", ident] if ident else [])
         S().activity("system", "Run started")
         env_ = {**os.environ, "ENLISTRA_ACCOUNT": acct}
@@ -173,6 +174,16 @@ def do_run(films: int, ident: str | None, trigger: str = "owner"):
             r = subprocess.run(cmd, stdout=fh, stderr=subprocess.STDOUT, text=True, env=env_)
         S().activity("system", f"Run finished (exit {r.returncode})")
         return r.returncode
+
+
+def _housekeep():
+    from enlistra import housekeeping
+    try:
+        freed = housekeeping.clean()
+        if sum(freed.values()) > 50:
+            S().activity("system", f"Disk cleanup freed {sum(freed.values()):.0f} MB ({', '.join(f'{k} {v:.0f}' for k, v in freed.items())})")
+    except Exception as e:  # noqa: BLE001
+        log.warning("housekeeping failed: %s", e)
 
 
 def _schedule_for(acct: str) -> list[str]:
@@ -418,6 +429,7 @@ def bible_approve():
 def do_feature(ident: str):
     acct = store.current_account()
     with RUN_LOCK:
+        _housekeep()
         S().activity("system", f"Long-form feature started for {ident}")
         with open(WORK / "run.log", "a") as fh:
             r = subprocess.run([sys.executable, "cli.py", "feature", ident, "--account", acct], stdout=fh,
@@ -479,6 +491,7 @@ def upload_chunk(uid):
 def do_polish(path: str, name: str):
     from enlistra import footage
     with RUN_LOCK:
+        _housekeep()
         try:
             e = footage.polish(Path(path), C(), name)
         finally:
@@ -509,6 +522,20 @@ def footage_long():
             return footage.make_long(C())
     _job("long", go)
     return jsonify(ok=True)
+
+
+@app.get("/api/admin/disk")
+def admin_disk():
+    from enlistra import housekeeping
+    return jsonify(housekeeping.report())
+
+
+@app.post("/api/admin/clean")
+def admin_clean():
+    from enlistra import housekeeping
+    with RUN_LOCK:
+        freed = housekeeping.clean()
+    return jsonify(freed=freed, after=housekeeping.report())
 
 
 @app.post("/api/analyst")

@@ -127,6 +127,12 @@ def youtube_access_token() -> str | None:
     return d["access_token"]
 
 
+def _nodash(t: str) -> str:
+    """House style: no em or en dashes anywhere we publish."""
+    t = (t or "").replace(" \u2013 ", " | ").replace(" \u2014 ", " | ")
+    return t.replace("\u2014", ", ").replace("\u2013", "-")
+
+
 def youtube_short(manifest: dict) -> str | None:
     tok = youtube_access_token()
     if not tok:
@@ -141,7 +147,8 @@ def youtube_short(manifest: dict) -> str | None:
     title = (base[:100 - len(tag) - 8] + tag + " #shorts")[:100]
     if manifest.get("longform"):
         title = base[:100]
-    body = {"snippet": {"title": title, "description": manifest["caption"][:4900], "categoryId": str(manifest.get("yt_category") or "23"),
+    title, desc_text = _nodash(title), _nodash(manifest["caption"])
+    body = {"snippet": {"title": title, "description": desc_text[:4900], "categoryId": str(manifest.get("yt_category") or "23"),
                         "tags": manifest.get("yt_tags") or ["charlie chaplin", "chaplin", "charlie chaplin comedy",
                                                  "silent film", "classic comedy", "funny", "comedy shorts"]},
             "status": {"privacyStatus": os.environ.get("YT_PRIVACY", "private"),
