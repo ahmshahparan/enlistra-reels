@@ -253,6 +253,24 @@ def publish(manifest_path: Path, cfg: dict, force: bool = False) -> dict:
         prior = (store.get().get_reel(manifest_path.stem) or {}).get("status") or {}
     except Exception:  # noqa: BLE001
         prior = {}
+    try:  # never post a gag that is already out there (same cut, or the same moment from another print)
+        from . import dedupe
+        twin = dedupe.find_duplicate(store.get(), manifest_path.stem)
+    except Exception as e:  # noqa: BLE001
+        log.warning("duplicate check failed: %s", e)
+        twin = None
+    if twin and not any(str(v).startswith("http") for v in prior.values()):
+        note = f"skipped: duplicate of {twin}, which is already posted"
+        log.warning("%s: %s", manifest_path.stem, note)
+        for p in cfg["platforms"]:
+            m["status"][p] = note
+        manifest_path.write_text(json.dumps(m, indent=2))
+        try:
+            store.get().update_reel(manifest_path.stem, status=m["status"], stage="rejected",
+                                    owner_note=f"Duplicate of {twin}; not posted")
+        except Exception:  # noqa: BLE001
+            pass
+        return m["status"]
     if schedule:
         for p in cfg["platforms"]:
             fn = PUBLISHERS.get(p)

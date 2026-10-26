@@ -45,6 +45,12 @@ class FileStore:
             return set()
         return {json.loads(l)["identifier"] for l in p.read_text().splitlines() if l.strip()}
 
+    def done_titles(self) -> set[str]:
+        p = self.work / "state.jsonl"
+        if not p.exists():
+            return set()
+        return {json.loads(l).get("title") or "" for l in p.read_text().splitlines() if l.strip()}
+
     def record_film(self, entry: dict):
         with (self.work / "state.jsonl").open("a") as fh:
             fh.write(json.dumps(entry) + "\n")
@@ -226,6 +232,12 @@ class SupabaseStore(FileStore):
     def done_ids(self) -> set[str]:
         rows = self._rest("GET", "films", {"account_id": f"eq.{self.account}", "select": "identifier"})
         return {r["identifier"] for r in rows}
+
+    def done_titles(self) -> set[str]:
+        rows = self._rest("GET", "films", {"account_id": f"eq.{self.account}", "select": "title"})
+        titles = {r.get("title") or "" for r in rows}
+        titles |= {((r.get("source") or {}).get("title") or "") for r in self.reels()}
+        return titles
 
     def record_film(self, entry: dict):
         super().record_film(entry)

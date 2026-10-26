@@ -73,6 +73,33 @@ def _overlaps(c, kept) -> bool:
     return any(not (c.end <= k.start or c.start >= k.end) for k in kept)
 
 
+class _Span:
+    def __init__(self, start, end):
+        self.start, self.end = float(start), float(end)
+
+
+def _prior_ranges(identifier: str) -> list:
+    out = []
+    for r in store.get().reels():
+        if r.get("film_identifier") != identifier:
+            continue
+        src = r.get("source") or {}
+        for a, b in (src.get("segments") or [[src.get("start"), src.get("end")]]):
+            if a is not None and b is not None:
+                out.append(_Span(a, b))
+    return out
+
+
+def _norm_title(t: str) -> str:
+    import re
+    t = (t or "").lower()
+    for w in ("charlie chaplin's", "charlie chaplins", "charlie chaplin", "chaplin's", "chaplin", "charlot",
+              "silent", "directed by", "the film", "1080p", "720p", "hd", "restored"):
+        t = t.replace(w, " ")
+    t = re.sub(r"\b(19|20)\d\d\b", " ", t)
+    return " ".join(re.sub(r"[^a-z ]", " ", t).split())
+
+
 def process_film(film, cfg: dict, work: Path, post_now: bool) -> list[Path]:
     scfg, ecfg, ccfg = cfg["select"], cfg["edit"], cfg.get("critic", {})
     ccfg = {**ccfg, "narration_start": ecfg.get("narration_start", 0.4),
@@ -88,6 +115,7 @@ def process_film(film, cfg: dict, work: Path, post_now: bool) -> list[Path]:
     picks_file = work / "picks" / f"{film.identifier}.json"
     hand = vision.load_picks_file(picks_file, cands)
 
+    prior = _prior_ranges(film.identifier)   # moments already cut from this upload
     kept: list[tuple] = []       # (clip, out_path, card)
     flagged: list[tuple] = []
     feedback = None
@@ -124,7 +152,9 @@ def process_film(film, cfg: dict, work: Path, post_now: bool) -> list[Path]:
             _record(cfg, {"identifier": film.identifier, "title": film_info["title"], "year": film_info.get("year"),
                           "clips": [], "skipped": "rights: Chaplin 1918+"})
             return []
-        clips = [c for c in clips if not _overlaps(c, [k[0] for k in kept])]
+        # never cut the same moment twice: not within this run, not from an earlier run
+        taken = [k[0] for k in kept + flagged] + prior
+        clips = [c for c in clips if not _overlaps(c, taken)]
         fb = []
         styles = ecfg.get("styles") or [ecfg.get("style", "cold")]
         for clip in clips:
@@ -214,7 +244,10 @@ def run(cfg: dict, films: int = 1, identifier: str | None = None, post_now: bool
             raise SystemExit(f"{identifier} is not free to use or has no usable file")
         films_list = [f]
     else:
-        films_list = source.find_films(cfg["source"], done, limit=films)
+        # the same film is often uploaded several times under different ids: treat them as one
+        seen = {_norm_title(t) for t in store.get(cfg["paths"]["work"]).done_titles()} - {""}
+        films_list = [f for f in source.find_films(cfg["source"], done, limit=films * 4)
+                      if _norm_title(f.title) not in seen][:films]
     if not films_list:
         log.info("no new free-to-use films found")
         return []
@@ -227,4 +260,11 @@ def run(cfg: dict, films: int = 1, identifier: str | None = None, post_now: bool
             for f in (work / "src").glob(f"{film.identifier}.*"):
                 if f.stat().st_size > 300_000_000:
                     f.unlink()
+    try:   # visual duplicate check against everything already posted or queued
+        from . import dedupe
+        dups = dedupe.audit(store.current_account(), apply=True)
+        if dups:
+            activity(cfg, "system", f"Duplicate check removed {len(dups)} reel(s) that repeat a gag already posted or queued")
+    except Exception as e:  # noqa: BLE001
+        log.warning("duplicate check failed: %s", e)
     return outputs

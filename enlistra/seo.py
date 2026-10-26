@@ -119,6 +119,31 @@ def update_video(account, vid, title=None, description=None, tags=None, category
     log.info("%s video %s -> %s", account, vid, snip["title"])
 
 
+def set_privacy(account, vid, privacy="private"):
+    h = _h(account)
+    cur = _ok(requests.get(f"{API}/videos", params={"part": "status", "id": vid}, headers=h, timeout=30))["items"]
+    if not cur:
+        raise RuntimeError(f"video {vid} not found on {account}")
+    status = cur[0]["status"]
+    body = {"id": vid, "status": {"privacyStatus": privacy, "embeddable": status.get("embeddable", True),
+                                  "selfDeclaredMadeForKids": status.get("madeForKids", False),
+                                  "containsSyntheticMedia": status.get("containsSyntheticMedia", False)}}
+    _ok(requests.put(f"{API}/videos", params={"part": "status"}, headers=h, json=body, timeout=30))
+    log.info("%s video %s -> %s", account, vid, privacy)
+
+
+def remove_from_playlists(account, vid):
+    h = _h(account)
+    pls = _ok(requests.get(f"{API}/playlists", params={"part": "id", "mine": "true", "maxResults": 50},
+                           headers=h, timeout=30)).get("items", [])
+    for p in pls:
+        items = _ok(requests.get(f"{API}/playlistItems", params={"part": "contentDetails", "playlistId": p["id"],
+                                                                   "maxResults": 50}, headers=h, timeout=30)).get("items", [])
+        for it in items:
+            if it["contentDetails"]["videoId"] == vid:
+                _ok(requests.delete(f"{API}/playlistItems", params={"id": it["id"]}, headers=h, timeout=30))
+
+
 def ensure_playlist(account, title, description, video_ids):
     h = _h(account)
     pls = _ok(requests.get(f"{API}/playlists", params={"part": "snippet", "mine": "true", "maxResults": 50},
