@@ -131,9 +131,12 @@ def ensure_playlist(account, title, description, video_ids):
     have = set()
     tok = None
     while True:
-        d = _ok(requests.get(f"{API}/playlistItems", params={"part": "contentDetails", "playlistId": pl["id"],
-                                                               "maxResults": 50, "pageToken": tok or ""},
-                             headers=h, timeout=30))
+        r = requests.get(f"{API}/playlistItems", params={"part": "contentDetails", "playlistId": pl["id"],
+                                                          "maxResults": 50, "pageToken": tok or ""},
+                         headers=h, timeout=30)
+        if r.status_code == 404:   # brand-new playlists are not listable for a short while
+            break
+        d = _ok(r)
         have |= {i["contentDetails"]["videoId"] for i in d.get("items", [])}
         tok = d.get("nextPageToken")
         if not tok:
@@ -162,9 +165,15 @@ def apply(spec):
         if s.get("banner"):
             upload_banner(acc, s["banner"])
         for vid, v in s.get("videos", {}).items():
-            update_video(acc, vid, **v)
+            try:
+                update_video(acc, vid, **v)
+            except Exception as e:  # noqa: BLE001
+                log.error("%s video %s: %s", acc, vid, str(e)[:160])
         for p in s.get("playlists", []):
-            ensure_playlist(acc, p["title"], p.get("description", ""), p.get("videos", []))
+            try:
+                ensure_playlist(acc, p["title"], p.get("description", ""), p.get("videos", []))
+            except Exception as e:  # noqa: BLE001
+                log.error("%s playlist %s: %s", acc, p["title"], str(e)[:200])
 
 
 def main(argv=None):

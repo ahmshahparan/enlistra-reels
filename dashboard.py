@@ -90,10 +90,21 @@ def _job(name: str, fn, *args):
     threading.Thread(target=run, daemon=True).start()
 
 
+_PUBLISHING: set = set()
+_PUB_LOCK = threading.Lock()
+
+
 def do_publish(name: str, platforms: list | None = None):
-    mp4, man = S().local_files(name)
-    pcfg = {**C()["post"], "platforms": platforms} if platforms else C()["post"]
-    res = poster.publish(man, pcfg, force=True)
+    with _PUB_LOCK:
+        if name in _PUBLISHING:
+            return {"skipped": "already publishing"}
+        _PUBLISHING.add(name)
+    try:
+        mp4, man = S().local_files(name)
+        pcfg = {**C()["post"], "platforms": platforms} if platforms else C()["post"]
+        res = poster.publish(man, pcfg, force=True)
+    finally:
+        _PUBLISHING.discard(name)
     S().activity("post", f"{name}.mp4 posted: {json.dumps(res)}", reel=name)
     return res
 

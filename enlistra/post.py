@@ -249,10 +249,19 @@ def publish(manifest_path: Path, cfg: dict, force: bool = False) -> dict:
             m["status"]["typefully"] = typefully_draft(m, schedule) or "skipped"
         except Exception as e:  # noqa: BLE001
             m["status"]["typefully"] = f"error: {e}"
+    try:  # never post the same reel twice (double taps, retries, stale manifests)
+        prior = (store.get().get_reel(manifest_path.stem) or {}).get("status") or {}
+    except Exception:  # noqa: BLE001
+        prior = {}
     if schedule:
         for p in cfg["platforms"]:
             fn = PUBLISHERS.get(p)
             if not fn:
+                continue
+            done = str(prior.get(p) or m["status"].get(p) or "")
+            if done.startswith("http"):
+                log.info("%s already on %s (%s); not posting again", manifest_path.stem, p, done)
+                m["status"][p] = done
                 continue
             try:
                 m["status"][p] = fn(m) or "skipped"
