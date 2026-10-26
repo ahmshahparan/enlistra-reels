@@ -14,6 +14,8 @@ What is added (so it is a new work, not a re-upload; YouTube's reused-content ru
 from __future__ import annotations
 
 import json
+import shutil
+import re
 import logging
 import random
 import subprocess
@@ -51,7 +53,9 @@ happens. Return strict JSON:
  "intro": "narration, 45 to 70 words: year, studio, who is in it, one fact, what to watch for",
  "chapters": [{"t": seconds, "name": "2 to 5 words", "note": "one sentence, under 20 words"}],
  "outro": "narration, under 30 words"}
-Chapters: use exactly the timestamps given. Facts must be certain; if unsure, say less."""
+Chapters: use exactly the timestamps given. Facts must be certain; if unsure, say less.
+Never mention modern restorations, archives, restoration companies or modern score composers: this video is
+our own restoration of the public domain film, scored with public domain recordings. No em or en dashes."""
 
 
 def plan(video: Path, film: dict, a, cfg: dict) -> dict:
@@ -69,6 +73,50 @@ def plan(video: Path, film: dict, a, cfg: dict) -> dict:
                                                 messages=[{"role": "user", "content": content}])
     text = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
     return json.loads(text[text.find("{"): text.rfind("}") + 1])
+
+
+BOUNDS = """You look at frames from the start and end of a silent film file. Modern releases often add cards that
+are not part of the original film: restoration notes, archive or company logos, "music by" credits for a new
+score, DVD menus, copyright notices. Find where the original film itself starts and ends. Original title cards,
+original intertitles and cast cards that belong to the film count as the film.
+Return strict JSON: {"film_starts_at": seconds, "film_ends_at": seconds or null,
+"modern_restoration_by": "company or archive named on a restoration card, else null",
+"modern_score_by": "composer named on a modern music credit, else null"}"""
+
+
+def _bounds(video: Path, duration: float, cfg: dict) -> dict:
+    """Where the original film starts and ends, skipping modern restoration and music credit cards."""
+    import anthropic
+    import base64
+
+    def grab(t):
+        r = subprocess.run(["ffmpeg", "-v", "error", "-ss", f"{t:.1f}", "-i", str(video), "-frames:v", "1",
+                            "-vf", "scale=400:-2", "-f", "image2", "-c:v", "mjpeg", "-q:v", "6", "-"], capture_output=True)
+        return r.stdout
+    times = [t for t in range(0, int(min(180, duration)), 4)] + \
+            [t for t in range(int(max(180, duration - 120)), int(duration) - 1, 6)]
+    content = []
+    for t in times:
+        b = grab(t)
+        if b:
+            content += [{"type": "text", "text": f"t={t}s"},
+                        {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
+                                                     "data": base64.b64encode(b).decode()}}]
+    content.append({"type": "text", "text": f"File length {duration:.0f}s."})
+    try:
+        msg = anthropic.Anthropic().messages.create(model=cfg.get("anthropic_model", "claude-sonnet-5-5"),
+                                                    max_tokens=800, system=BOUNDS,
+                                                    messages=[{"role": "user", "content": content}])
+        text = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
+        d = json.loads(text[text.find("{"): text.rfind("}") + 1])
+    except Exception as e:  # noqa: BLE001
+        log.warning("film bounds failed: %s", e)
+        d = {}
+    s0 = max(0.0, float(d.get("film_starts_at") or 0))
+    e0 = d.get("film_ends_at")
+    e0 = float(e0) if e0 and float(e0) > s0 + 60 else duration
+    return {"start": s0, "end": min(e0, duration), "restoration_by": d.get("modern_restoration_by"),
+            "score_by": d.get("modern_score_by")}
 
 
 def _card(text: str, sub: str, out: Path) -> Path:
@@ -96,7 +144,15 @@ def render(identifier: str, cfg: dict, limit_s: float | None = None) -> Path:
     if limit_s:
         a.duration = min(a.duration, limit_s)
         a.cuts = [c for c in a.cuts if c < limit_s - 10]
+    bounds = _bounds(video, a.duration, cfg["select"])
+    if bounds["restoration_by"] or bounds["score_by"]:
+        st.activity("system", f"{identifier}: skipping modern cards (restoration: {bounds['restoration_by'] or 'none'}, "
+                              f"score credit: {bounds['score_by'] or 'none'}); film runs "
+                              f"{bounds['start']:.0f}s to {bounds['end']:.0f}s")
     p = plan(video, info, a, cfg["select"])
+    s0, e0 = bounds["start"], bounds["end"]
+    p["chapters"] = [{**c, "t": round(float(c["t"]) - s0, 1)} for c in p.get("chapters", [])
+                     if s0 + 5 <= float(c["t"]) < e0 - 20]
     if not info.get("year") and isinstance(p.get("year"), int):
         info["year"] = p["year"]
     tmp = Path(tempfile.mkdtemp(prefix="lfr_"))
@@ -107,7 +163,8 @@ def render(identifier: str, cfg: dict, limit_s: float | None = None) -> Path:
     vf = (f"split=2[a][b];[b]scale=480:270:force_original_aspect_ratio=increase,crop=480:270,boxblur=10:2,"
           f"eq=brightness=-0.25,scale={W}:{H}[bg];[a]hqdn3d=2.5:2:5:4,deflicker=size=5,"
           f"eq=contrast=1.06,scale=-2:{H}:flags=lanczos,unsharp=5:5:0.4[fg];[bg][fg]overlay=(W-w)/2:0,fps=24,format=yuv420p")
-    subprocess.run(["ffmpeg", "-y", "-v", "error", *(["-t", str(limit_s)] if limit_s else []), "-i", str(video),
+    span = (min(e0, limit_s) if limit_s else e0) - s0
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-ss", f"{s0:.2f}", "-t", f"{span:.2f}", "-i", str(video),
                     "-filter_complex", vf, "-an",
                     "-c:v", "libx264", "-preset", "slow", "-crf", "18", "-tune", "film", str(body)], check=True)
     dur = edit._dur(body)
@@ -150,7 +207,7 @@ def render(identifier: str, cfg: dict, limit_s: float | None = None) -> Path:
                     (";".join(graph) + ";" if graph else "") + f"{chain}atrim=0:{dur:.2f},volume=0.7[m]",
                     "-map", "[m]", "-c:a", "aac", str(music)], check=True)
     notes = []
-    for i, ch in enumerate(p.get("chapters", [])):
+    for i, ch in enumerate([] if cfg.get("longform", {}).get("commentary", True) else p.get("chapters", [])):
         wav = edit.narrate(ch["note"], ecfg, tmp / f"ch{i}.wav")
         if wav:
             notes.append((float(ch["t"]), wav))
@@ -195,6 +252,13 @@ def render(identifier: str, cfg: dict, limit_s: float | None = None) -> Path:
                     "-c:v", "libx264", "-crf", "20", "-c:a", "aac", "-movflags", "+faststart", str(out)], check=True)
     subprocess.run(["ffmpeg", "-y", "-v", "error", "-ss", f"{edit._dur(intro) + 60:.1f}", "-i", str(out),
                     "-frames:v", "1", "-q:v", "3", str(out.with_suffix(".jpg"))], check=True)
+    commentary_lines = []
+    if cfg.get("longform", {}).get("commentary", True):     # narration throughout (owner's standing note)
+        from . import commentary
+        lines = commentary.write(out, {"title": info["title"], "year": info["year"]}, cfg)
+        narrated = out.with_name(out.stem + ".narrated.mp4")
+        commentary_lines = commentary.apply(out, lines, cfg, narrated)
+        shutil.move(str(narrated), out)
     from . import post
     m = json.loads(post.write_manifest(out, {"identifier": identifier, "title": info["title"], "year": info["year"],
                                              "reason_free": film.reason_free},
@@ -203,13 +267,16 @@ def render(identifier: str, cfg: dict, limit_s: float | None = None) -> Path:
                                        cfg["post"]).read_text())
     chap = "\n".join(f"{int((edit._dur(intro) + float(c['t'])) // 60)}:{int((edit._dur(intro) + float(c['t'])) % 60):02d} "
                      f"{c['name']}" for c in p.get("chapters", []))
-    credit = f"Source: {info['title']}" + (f" ({info['year']})" if info.get("year") else "") + \
+    base_title = re.sub(r"\s*\(\d{4}\)\s*$", "", info["title"] or "")
+    credit = f"Source: {base_title}" + (f" ({info['year']})" if info.get("year") else "") + \
         ". Public domain film, restored and re-scored by Enlistra Reels. Music: public domain recordings."
     tags = " ".join(t for t in cfg["post"].get("hashtags", []) if t.lower() != "#shorts")
     m["caption"] = f"{p['description']}\n\n0:00 Introduction\n{chap}\n\n{credit}\n\n{tags}"
     m["critic"] = {"verdict": "pass", "feedback": ""}
     m["approval"] = "pending"
     m["longform"] = True
+    m["commentary"] = commentary_lines
+    m["print"] = bounds
     st.save_reel(name, m, {"gates": [], "judge": None})
     st.activity("queue", f"Long-form feature ready for approval: '{p['title']}' ({edit._dur(out) / 60:.0f} min)", reel=name)
     return out
