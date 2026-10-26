@@ -25,5 +25,10 @@ critic:
   min_len: 10
   max_len: 30
 post:
-  hashtags: ["#animals", "#wildlife", "#nature", "#animalfacts", "#shorts"]
-  yt_tags: ["animal facts", "wildlife", "nature", "animals", "nature documentary", "shorts"]
+  hashtags: ["#animalfacts", "#wildlife", "#nature", "#animals", "#shorts"]
+  yt_tags: ["animal facts", "wildlife", "nature", "animals", "birds", "nature documentary", "wildlife shorts",
+            "fun facts", "biology", "science facts"]
+  yt_category: "15"       # Pets & Animals
+  playlist: "Wild Facts Shorts"
+  desc_footer: |
+    One real animal, one true fact, every day. Real footage only, no AI animals.

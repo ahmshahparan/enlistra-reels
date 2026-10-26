@@ -66,7 +66,13 @@ post:
   typefully_enabled: true
   require_approval: true  # reels wait in the dashboard queue until the owner approves
   platforms: [youtube_shorts]   # TikTok and Instagram are posted from the phone queue in the dashboard
-  hashtags: ["#charliechaplin", "#chaplin", "#comedy", "#funny", "#silentfilm", "#shorts"]
+  hashtags: ["#charliechaplin", "#silentfilm", "#comedy", "#chaplin", "#funny", "#shorts"]
+  yt_tags: ["charlie chaplin", "chaplin", "charlie chaplin comedy", "silent film", "silent comedy", "classic comedy",
+            "slapstick", "funny old movies", "the tramp", "black and white movies", "comedy shorts", "funny"]
+  yt_category: "23"       # Comedy
+  playlist: "Charlie Chaplin Shorts"
+  desc_footer: |
+    New silent comedy Shorts every day. Subscribe: https://www.youtube.com/@enlistra_reels?sub_confirmation=1
 
 paths:
   work: work

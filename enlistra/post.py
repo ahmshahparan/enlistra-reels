@@ -31,11 +31,14 @@ def write_manifest(reel: Path, film: dict, clip: dict, cfg: dict) -> Path:
     caption = clip["caption"].strip()
     attribution = f"Source: {film['title']}" + (f" ({film['year']})" if film.get("year") else "")
     attribution += ". Public domain, via Internet Archive."
-    full = f"{caption}\n\n{attribution}\n\n{' '.join(cfg['hashtags'])}"
+    tags = [t for t in cfg["hashtags"] if t.lower() != "#shorts"][:3]   # YouTube shows the first 3
+    footer = cfg.get("desc_footer", "").strip()
+    full = "\n\n".join(x for x in (caption, attribution, footer, " ".join(tags)) if x)
     m = {
         "reel": str(reel), "cover": str(reel.with_suffix(".jpg")),
         "hook": clip["hook"], "title": clip.get("title") or clip["hook"], "style": clip.get("style"),
         "caption": full, "platforms": cfg["platforms"], "yt_tags": cfg.get("yt_tags"),
+        "yt_category": cfg.get("yt_category", "23"), "playlist": cfg.get("playlist"),
         "source": {"identifier": film["identifier"], "title": film["title"],
                    "year": film.get("year"), "license": film.get("reason_free"),
                    "url": f"https://archive.org/details/{film['identifier']}",
@@ -102,6 +105,7 @@ def instagram_reel(manifest: dict) -> str | None:
 # after Google's YouTube API audit passes.
 GOOGLE_TOKEN = "https://oauth2.googleapis.com/token"
 YT_SCOPES = ("https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly "
+             "https://www.googleapis.com/auth/youtube.force-ssl "
              "https://www.googleapis.com/auth/yt-analytics.readonly")
 
 
@@ -137,7 +141,7 @@ def youtube_short(manifest: dict) -> str | None:
     title = (base[:100 - len(tag) - 8] + tag + " #shorts")[:100]
     if manifest.get("longform"):
         title = base[:100]
-    body = {"snippet": {"title": title, "description": manifest["caption"][:4900], "categoryId": "23",
+    body = {"snippet": {"title": title, "description": manifest["caption"][:4900], "categoryId": str(manifest.get("yt_category") or "23"),
                         "tags": manifest.get("yt_tags") or ["charlie chaplin", "chaplin", "charlie chaplin comedy",
                                                  "silent film", "classic comedy", "funny", "comedy shorts"]},
             "status": {"privacyStatus": os.environ.get("YT_PRIVACY", "private"),
@@ -157,6 +161,9 @@ def youtube_short(manifest: dict) -> str | None:
         raise RuntimeError(f"YouTube upload {up.status_code}: {up.text[:300]}")
     vid = up.json().get("id")
     log.info("YouTube video %s (%s)", vid, body["status"]["privacyStatus"])
+    if manifest.get("playlist") and vid:
+        from .seo import add_to_playlist
+        add_to_playlist(store.current_account(), manifest["playlist"], vid)
     return f"https://youtube.com/shorts/{vid}"
 
 
